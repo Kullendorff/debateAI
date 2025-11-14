@@ -7,6 +7,9 @@
 # Session storage
 .sessions/
 
+# Archive folder for old/test files
+archive/
+
 # Node modules
 node_modules/
 
