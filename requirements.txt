@@ -1,0 +1,8 @@
+# Python dependencies for smart consensus engine
+# Install with: pip install -r requirements.txt
+# Then download spaCy model: python -m spacy download xx_ent_wiki_sm
+
+numpy>=1.21.0
+spacy>=3.0.0
+sentence-transformers>=2.2.0
+scikit-learn>=1.0.0

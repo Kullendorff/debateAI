@@ -1,5 +1,32 @@
 #!/usr/bin/env node
 
+// CRITICAL: MCP protocol requires clean stdout (only JSON)
+// Load .env manually to avoid dotenv's stdout pollution
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+// Manually parse .env file without any output
+try {
+  const envPath = resolve(process.cwd(), '.env');
+  const envFile = readFileSync(envPath, 'utf-8');
+
+  for (const line of envFile.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [key, ...valueParts] = trimmed.split('=');
+      if (key && valueParts.length > 0) {
+        const value = valueParts.join('=').trim();
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    }
+  }
+} catch (error) {
+  // .env file doesn't exist or can't be read - that's OK
+  // Environment variables may be provided by MCP config
+}
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -20,8 +47,12 @@ class PhoneAFriendMCPServer {
   private server: Server;
   private consensusEngine: ConsensusEngine;
   private aiManager: AIClientManager;
+  private cleanupTimer?: NodeJS.Timeout;
 
   constructor() {
+    // Validate environment variables at startup
+    this.validateEnvironment();
+
     this.server = new Server(
       {
         name: 'phone-a-friend-mcp',
@@ -347,7 +378,7 @@ ${this.formatCostSummary(result.cost_summary)}
 
     } else {
       // Non-interactive deadlock - provide intervention summary
-      responseText = this.consensusEngine.formatInterventionSummary(result.session_id);
+      responseText = await this.consensusEngine.formatInterventionSummary(result.session_id);
       responseText += `\n\n${this.formatRoundSummary(result.debate_log)}`;
       responseText += `\n\n**Session ID:** \`${result.session_id}\`\n\n*Use continue_debate tool to proceed with one of the options above.*`;
     }
@@ -407,11 +438,12 @@ ${result.final_answer}
 ${this.formatCostSummary(result.cost_summary)}`;
 
     } else {
+      const interventionSummary = await this.consensusEngine.formatInterventionSummary(result.session_id);
       responseText = `## 🚨 Still No Consensus
 
 The debate continued but consensus was not reached.
 
-${this.consensusEngine.formatInterventionSummary(result.session_id)}
+${interventionSummary}
 
 **Session ID:** \`${result.session_id}\``;
     }
@@ -433,7 +465,7 @@ ${this.consensusEngine.formatInterventionSummary(result.session_id)}
 
     console.error(`Analyzing disagreement for session ${args.session_id}`);
 
-    const analysis = this.consensusEngine.analyzeDisagreementForSession(args.session_id);
+    const analysis = await this.consensusEngine.analyzeDisagreementForSession(args.session_id);
 
     if (!analysis) {
       throw new Error(`Session ${args.session_id} not found`);
@@ -642,7 +674,7 @@ ${this.formatCostSummary(result.cost_summary)}
     const format = args.format || 'markdown';
     console.error(`Getting debate log for session ${args.session_id} in ${format} format`);
 
-    const logText = this.consensusEngine.getDebateLog(args.session_id, format);
+    const logText = await this.consensusEngine.getDebateLog(args.session_id, format);
 
     if (!logText) {
       throw new Error(`Session ${args.session_id} not found`);
@@ -658,7 +690,63 @@ ${this.formatCostSummary(result.cost_summary)}
     };
   }
 
+  private validateEnvironment(): void {
+    const hasOpenAI = !!process.env.OPENAI_API_KEY;
+    const hasGemini = !!process.env.GEMINI_API_KEY;
+    const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+
+    if (!hasOpenAI && !hasGemini && !hasAnthropic) {
+      throw new Error(
+        'No API keys configured. Please set at least one of: OPENAI_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY in your .env file'
+      );
+    }
+
+    const configured: string[] = [];
+    if (hasOpenAI) configured.push('OpenAI');
+    if (hasGemini) configured.push('Gemini');
+    if (hasAnthropic) configured.push('Anthropic');
+
+    console.error(`Environment validated. Configured providers: ${configured.join(', ')}`);
+  }
+
+  /**
+   * Start periodic session cleanup
+   * Cleans up sessions older than 7 days, runs every 24 hours
+   */
+  private startPeriodicCleanup(): void {
+    // Run cleanup immediately on startup
+    this.consensusEngine.cleanupOldSessions().catch(err => {
+      console.error('Initial session cleanup failed:', err);
+    });
+
+    // Then run every 24 hours
+    const cleanupInterval = 24 * 60 * 60 * 1000; // 24 hours
+    this.cleanupTimer = setInterval(() => {
+      this.consensusEngine.cleanupOldSessions().catch(err => {
+        console.error('Periodic session cleanup failed:', err);
+      });
+    }, cleanupInterval);
+
+    console.error('Session cleanup scheduled (every 24 hours)');
+  }
+
+  /**
+   * Stop periodic cleanup (for graceful shutdown)
+   */
+  private stopPeriodicCleanup(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+  }
+
   async run(): Promise<void> {
+    // Initialize consensus engine (must be done after construction)
+    await this.consensusEngine.initialize();
+
+    // Start periodic session cleanup
+    this.startPeriodicCleanup();
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Phone-a-Friend MCP v2 server started successfully');

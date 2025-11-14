@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/smart_consensus.py build/smart_consensus.py",
     "dev": "tsc --watch",
     "start": "node build/index.js",
     "clean": "rimraf build",

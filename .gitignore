@@ -4,6 +4,9 @@
 .env.production
 .env.staging
 
+# Session storage
+.sessions/
+
 # Node modules
 node_modules/
 

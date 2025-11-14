@@ -3,6 +3,40 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AIClient, AIResponse } from './types.js';
 
+/**
+ * Extract confidence score from AI response content
+ * Shared utility function for all AI clients
+ */
+function extractConfidence(content: string): number {
+  // Simple heuristic to extract confidence from response
+  const confidencePatterns = [
+    /(?:confident|confidence|certain|sure).*?(\d{1,3})%/i,
+    /(\d{1,3})%.*?(?:confident|confidence|certain|sure)/i
+  ];
+
+  for (const pattern of confidencePatterns) {
+    const match = content.match(pattern);
+    if (match?.[1]) {
+      return Math.min(100, Math.max(0, parseInt(match[1])));
+    }
+  }
+
+  // Fallback heuristic based on language certainty
+  const certainWords = ['definitely', 'certainly', 'absolutely', 'clearly'];
+  const uncertainWords = ['maybe', 'perhaps', 'possibly', 'might', 'could'];
+
+  const certainCount = certainWords.filter(word =>
+    content.toLowerCase().includes(word)
+  ).length;
+  const uncertainCount = uncertainWords.filter(word =>
+    content.toLowerCase().includes(word)
+  ).length;
+
+  if (certainCount > uncertainCount) return 85;
+  if (uncertainCount > certainCount) return 60;
+  return 75; // Default confidence
+}
+
 export class OpenAIClient implements AIClient {
   private client: OpenAI;
   private defaultModel = 'gpt-4o';
@@ -13,7 +47,10 @@ export class OpenAIClient implements AIClient {
 
   async generateResponse(prompt: string, model?: string): Promise<AIResponse> {
     const modelToUse = model || this.defaultModel;
-    
+
+    console.error(`[DEBUG] OpenAI: Starting request with model: ${modelToUse}`);
+    console.error(`[DEBUG] OpenAI: Prompt length: ${prompt.length} chars`);
+
     try {
       const createParams: any = {
         model: modelToUse,
@@ -25,6 +62,7 @@ export class OpenAIClient implements AIClient {
         createParams.temperature = 0.7;
       }
 
+      console.error(`[DEBUG] OpenAI: Calling chat.completions.create...`);
       const response = await this.client.chat.completions.create(createParams);
 
       const content = response.choices[0]?.message?.content || '';
@@ -33,16 +71,20 @@ export class OpenAIClient implements AIClient {
       const outputTokens = usage?.completion_tokens || 0;
       const totalTokens = usage?.total_tokens || inputTokens + outputTokens;
 
+      console.error(`[DEBUG] OpenAI: Success! Response length: ${content.length} chars, Tokens: ${totalTokens}, Cost: $${this.calculateCost(inputTokens, outputTokens, modelToUse).toFixed(6)}`);
+
       return {
         content,
-        confidence: this.extractConfidence(content),
+        confidence: extractConfidence(content),
         model: modelToUse,
         tokens_used: totalTokens,
         cost_usd: this.calculateCost(inputTokens, outputTokens, modelToUse)
       };
-    } catch (error) {
-      console.error('OpenAI API error:', error);
-      throw new Error(`OpenAI API failed: ${error}`);
+    } catch (error: any) {
+      console.error(`[DEBUG] OpenAI: ERROR occurred!`);
+      console.error(`[DEBUG] OpenAI: Error message: ${error?.message}`);
+      console.error(`[DEBUG] OpenAI: Full error:`, error);
+      throw new Error(`OpenAI API failed: ${error?.message || error}`);
     }
   }
 
@@ -63,41 +105,11 @@ export class OpenAIClient implements AIClient {
     const modelPricing = pricing[model] || pricing['gpt-4o'];
     return (inputTokens * modelPricing.input + outputTokens * modelPricing.output) / 1000;
   }
-
-  private extractConfidence(content: string): number {
-    // Simple heuristic to extract confidence from response
-    const confidencePatterns = [
-      /(?:confident|confidence|certain|sure).*?(\d{1,3})%/i,
-      /(\d{1,3})%.*?(?:confident|confidence|certain|sure)/i
-    ];
-
-    for (const pattern of confidencePatterns) {
-      const match = content.match(pattern);
-      if (match?.[1]) {
-        return Math.min(100, Math.max(0, parseInt(match[1])));
-      }
-    }
-
-    // Fallback heuristic based on language certainty
-    const certainWords = ['definitely', 'certainly', 'absolutely', 'clearly'];
-    const uncertainWords = ['maybe', 'perhaps', 'possibly', 'might', 'could'];
-    
-    const certainCount = certainWords.filter(word => 
-      content.toLowerCase().includes(word)
-    ).length;
-    const uncertainCount = uncertainWords.filter(word => 
-      content.toLowerCase().includes(word)
-    ).length;
-
-    if (certainCount > uncertainCount) return 85;
-    if (uncertainCount > certainCount) return 60;
-    return 75; // Default confidence
-  }
 }
 
 export class GeminiClient implements AIClient {
   private client: GoogleGenerativeAI;
-  private defaultModel = 'gemini-2.5-pro';
+  private defaultModel = 'gemini-2.0-flash-exp';
 
   constructor(apiKey: string) {
     this.client = new GoogleGenerativeAI(apiKey);
@@ -105,28 +117,54 @@ export class GeminiClient implements AIClient {
 
   async generateResponse(prompt: string, model?: string): Promise<AIResponse> {
     const modelToUse = model || this.defaultModel;
-    
+
+    console.error(`[DEBUG] Gemini: Starting request with model: ${modelToUse}`);
+    console.error(`[DEBUG] Gemini: Prompt length: ${prompt.length} chars`);
+
     try {
       const geminiModel = this.client.getGenerativeModel({ model: modelToUse });
+      console.error(`[DEBUG] Gemini: Model instance created, calling generateContent...`);
+
       const result = await geminiModel.generateContent(prompt);
+      console.error(`[DEBUG] Gemini: generateContent completed, getting response...`);
+
       const response = await result.response;
+      console.error(`[DEBUG] Gemini: Response received, extracting text...`);
+
       const content = response.text();
+      console.error(`[DEBUG] Gemini: Response text length: ${content.length} chars`);
+      console.error(`[DEBUG] Gemini: First 100 chars: ${content.substring(0, 100)}...`);
 
       // Gemini doesn't provide detailed token usage, so we estimate
       const estimatedTokens = this.estimateTokens(prompt + content);
       const inputTokens = this.estimateTokens(prompt);
       const outputTokens = estimatedTokens - inputTokens;
 
+      console.error(`[DEBUG] Gemini: Success! Tokens: ${estimatedTokens}, Cost: $${this.calculateCost(inputTokens, outputTokens, modelToUse).toFixed(6)}`);
+
       return {
         content,
-        confidence: this.extractConfidence(content),
+        confidence: extractConfidence(content),
         model: modelToUse,
         tokens_used: estimatedTokens,
         cost_usd: this.calculateCost(inputTokens, outputTokens, modelToUse)
       };
-    } catch (error) {
-      console.error('Gemini API error:', error);
-      throw new Error(`Gemini API failed: ${error}`);
+    } catch (error: any) {
+      console.error(`[DEBUG] Gemini: ERROR occurred!`);
+      console.error(`[DEBUG] Gemini: Error type: ${error?.constructor?.name}`);
+      console.error(`[DEBUG] Gemini: Error message: ${error?.message}`);
+      console.error(`[DEBUG] Gemini: Full error:`, error);
+
+      // Check for specific error types
+      if (error?.message?.includes('quota')) {
+        console.error(`[DEBUG] Gemini: QUOTA ERROR - Rate limit exceeded`);
+      } else if (error?.message?.includes('404')) {
+        console.error(`[DEBUG] Gemini: MODEL NOT FOUND - ${modelToUse} may not be available`);
+      } else if (error?.message?.includes('API key')) {
+        console.error(`[DEBUG] Gemini: API KEY ERROR - Check your GEMINI_API_KEY`);
+      }
+
+      throw new Error(`Gemini API failed: ${error?.message || error}`);
     }
   }
 
@@ -151,35 +189,6 @@ export class GeminiClient implements AIClient {
     // Rough estimation: ~4 characters per token
     return Math.ceil(text.length / 4);
   }
-
-  private extractConfidence(content: string): number {
-    // Same confidence extraction logic as OpenAI
-    const confidencePatterns = [
-      /(?:confident|confidence|certain|sure).*?(\d{1,3})%/i,
-      /(\d{1,3})%.*?(?:confident|confidence|certain|sure)/i
-    ];
-
-    for (const pattern of confidencePatterns) {
-      const match = content.match(pattern);
-      if (match?.[1]) {
-        return Math.min(100, Math.max(0, parseInt(match[1])));
-      }
-    }
-
-    const certainWords = ['definitely', 'certainly', 'absolutely', 'clearly'];
-    const uncertainWords = ['maybe', 'perhaps', 'possibly', 'might', 'could'];
-    
-    const certainCount = certainWords.filter(word => 
-      content.toLowerCase().includes(word)
-    ).length;
-    const uncertainCount = uncertainWords.filter(word => 
-      content.toLowerCase().includes(word)
-    ).length;
-
-    if (certainCount > uncertainCount) return 85;
-    if (uncertainCount > certainCount) return 60;
-    return 75;
-  }
 }
 
 export class AnthropicClient implements AIClient {
@@ -192,31 +201,39 @@ export class AnthropicClient implements AIClient {
 
   async generateResponse(prompt: string, model?: string): Promise<AIResponse> {
     const modelToUse = model || this.defaultModel;
-    
+
+    console.error(`[DEBUG] Claude: Starting request with model: ${modelToUse}`);
+    console.error(`[DEBUG] Claude: Prompt length: ${prompt.length} chars`);
+
     try {
+      console.error(`[DEBUG] Claude: Calling messages.create...`);
       const response = await this.client.messages.create({
         model: modelToUse,
         max_tokens: 4000,
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const content = response.content[0]?.type === 'text' 
-        ? response.content[0].text 
+      const content = response.content[0]?.type === 'text'
+        ? response.content[0].text
         : '';
-      
+
       const inputTokens = response.usage.input_tokens;
       const outputTokens = response.usage.output_tokens;
 
+      console.error(`[DEBUG] Claude: Success! Response length: ${content.length} chars, Tokens: ${inputTokens + outputTokens}, Cost: $${this.calculateCost(inputTokens, outputTokens, modelToUse).toFixed(6)}`);
+
       return {
         content,
-        confidence: this.extractConfidence(content),
+        confidence: extractConfidence(content),
         model: modelToUse,
         tokens_used: inputTokens + outputTokens,
         cost_usd: this.calculateCost(inputTokens, outputTokens, modelToUse)
       };
-    } catch (error) {
-      console.error('Anthropic API error:', error);
-      throw new Error(`Anthropic API failed: ${error}`);
+    } catch (error: any) {
+      console.error(`[DEBUG] Claude: ERROR occurred!`);
+      console.error(`[DEBUG] Claude: Error message: ${error?.message}`);
+      console.error(`[DEBUG] Claude: Full error:`, error);
+      throw new Error(`Anthropic API failed: ${error?.message || error}`);
     }
   }
 
@@ -235,35 +252,6 @@ export class AnthropicClient implements AIClient {
 
     const modelPricing = pricing[model] || pricing['claude-sonnet-4-20250514'];
     return (inputTokens * modelPricing.input + outputTokens * modelPricing.output) / 1000;
-  }
-
-  private extractConfidence(content: string): number {
-    // Same confidence extraction logic
-    const confidencePatterns = [
-      /(?:confident|confidence|certain|sure).*?(\d{1,3})%/i,
-      /(\d{1,3})%.*?(?:confident|confidence|certain|sure)/i
-    ];
-
-    for (const pattern of confidencePatterns) {
-      const match = content.match(pattern);
-      if (match?.[1]) {
-        return Math.min(100, Math.max(0, parseInt(match[1])));
-      }
-    }
-
-    const certainWords = ['definitely', 'certainly', 'absolutely', 'clearly'];
-    const uncertainWords = ['maybe', 'perhaps', 'possibly', 'might', 'could'];
-    
-    const certainCount = certainWords.filter(word => 
-      content.toLowerCase().includes(word)
-    ).length;
-    const uncertainCount = uncertainWords.filter(word => 
-      content.toLowerCase().includes(word)
-    ).length;
-
-    if (certainCount > uncertainCount) return 85;
-    if (uncertainCount > uncertainCount) return 60;
-    return 75;
   }
 }
 

@@ -1,29 +1,61 @@
-import { 
-  DebateRound, 
-  DebateSession, 
-  PhoneAFriendParams, 
-  PhoneAFriendResult, 
-  DisagreementReport, 
+import {
+  DebateRound,
+  DebateSession,
+  PhoneAFriendParams,
+  PhoneAFriendResult,
+  DisagreementReport,
   AIResponse,
   ContinueDebateParams
 } from './types.js';
 import { AIClientManager } from './ai-clients.js';
 import { CostController } from './cost-controller.js';
+import { SessionStore, FileSessionStore } from './session-store.js';
 
 export class ConsensusEngine {
-  private sessions: Map<string, DebateSession> = new Map();
+  private sessionStore: SessionStore;
   private aiManager: AIClientManager;
   private costController: CostController;
+  private initialized: boolean = false;
 
-  constructor(aiManager: AIClientManager) {
+  constructor(aiManager: AIClientManager, sessionStore?: SessionStore) {
     this.aiManager = aiManager;
     this.costController = new CostController();
+    this.sessionStore = sessionStore || new FileSessionStore();
+  }
+
+  /**
+   * Initialize the consensus engine (must be called before use)
+   */
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    await this.sessionStore.initialize();
+    this.initialized = true;
+  }
+
+  private ensureInitialized(): void {
+    if (!this.initialized) {
+      throw new Error('ConsensusEngine not initialized. Call initialize() first.');
+    }
+  }
+
+  /**
+   * Clean up old sessions
+   * @param maxAgeMs Maximum age of sessions to keep (default: 7 days)
+   * @returns Number of sessions deleted
+   */
+  async cleanupOldSessions(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<number> {
+    this.ensureInitialized();
+    const deletedCount = await this.sessionStore.cleanup(maxAgeMs);
+    console.error(`Session cleanup: deleted ${deletedCount} old sessions`);
+    return deletedCount;
   }
 
   async phoneAFriend(params: PhoneAFriendParams, progressCallback?: (update: string) => void, interactive = false): Promise<PhoneAFriendResult> {
+    this.ensureInitialized();
     const sessionId = this.generateSessionId();
     const session = this.createSession(sessionId, params);
-    
+    await this.sessionStore.set(sessionId, session);
+
     try {
       this.costController.initializeSession(sessionId);
       
@@ -36,7 +68,9 @@ export class ConsensusEngine {
         
         const roundResult = await this.conductRound(session, round, progressCallback);
         session.rounds.push(roundResult);
-        
+        session.updated_at = new Date();
+        await this.sessionStore.set(sessionId, session);
+
         // Commentary after each round
         const consensus = roundResult.consensus_score;
         if (consensus > 0.85) {
@@ -51,7 +85,8 @@ export class ConsensusEngine {
         if (interactive) {
           session.status = 'paused';
           session.updated_at = new Date();
-          
+          await this.sessionStore.set(sessionId, session);
+
           if (consensus >= 0.85) {
             return {
               status: 'consensus',
@@ -78,6 +113,8 @@ export class ConsensusEngine {
         if (budgetCheck.currentCost >= 10.0) {
           console.error(`🚨 EMERGENCY STOP: Hard limit $10 reached ($${budgetCheck.currentCost.toFixed(4)})`);
           session.status = 'failed';
+          session.updated_at = new Date();
+          await this.sessionStore.set(sessionId, session);
           throw new Error(`Emergency stop: Cost exceeded $10 safety limit ($${budgetCheck.currentCost.toFixed(4)})`);
         }
         
@@ -89,8 +126,10 @@ export class ConsensusEngine {
         // Check for consensus
         if (roundResult.consensus_score >= 0.85) {
           session.status = 'consensus';
+          session.updated_at = new Date();
+          await this.sessionStore.set(sessionId, session);
           const finalAnswer = this.synthesizeFinalAnswer(roundResult);
-          
+
           return {
             status: 'consensus',
             final_answer: finalAnswer,
@@ -108,6 +147,8 @@ export class ConsensusEngine {
 
       // No consensus reached
       session.status = 'deadlock';
+      session.updated_at = new Date();
+      await this.sessionStore.set(sessionId, session);
       const disagreementReport = this.analyzeDisagreement(session.rounds);
 
       return {
@@ -125,7 +166,8 @@ export class ConsensusEngine {
   }
 
   async continueDebate(params: ContinueDebateParams): Promise<PhoneAFriendResult> {
-    const session = this.sessions.get(params.session_id);
+    this.ensureInitialized();
+    const session = await this.sessionStore.get(params.session_id);
     if (!session) {
       throw new Error(`Session ${params.session_id} not found`);
     }
@@ -138,6 +180,8 @@ export class ConsensusEngine {
 
       const selectedResponse = lastRound.responses[params.selected_ai];
       session.status = 'consensus';
+      session.updated_at = new Date();
+      await this.sessionStore.set(params.session_id, session);
 
       return {
         status: 'consensus',
@@ -152,6 +196,8 @@ export class ConsensusEngine {
       const lastRound = session.rounds[session.rounds.length - 1];
       const synthesized = this.synthesizeFinalAnswer(lastRound!);
       session.status = 'consensus';
+      session.updated_at = new Date();
+      await this.sessionStore.set(params.session_id, session);
 
       return {
         status: 'consensus',
@@ -173,9 +219,13 @@ export class ConsensusEngine {
     for (let round = session.rounds.length + 1; round <= session.max_rounds; round++) {
       const roundResult = await this.conductRound(session, round);
       session.rounds.push(roundResult);
+      session.updated_at = new Date();
+      await this.sessionStore.set(params.session_id, session);
 
       if (roundResult.consensus_score >= 0.85) {
         session.status = 'consensus';
+        session.updated_at = new Date();
+        await this.sessionStore.set(params.session_id, session);
         return {
           status: 'consensus',
           final_answer: this.synthesizeFinalAnswer(roundResult),
@@ -187,10 +237,12 @@ export class ConsensusEngine {
 
       const budgetCheck = this.costController.checkBudgetLimit(params.session_id, session.max_cost_usd);
       
-      // EMERGENCY BRAKE: Hard stop at $10 
+      // EMERGENCY BRAKE: Hard stop at $10
       if (budgetCheck.currentCost >= 10.0) {
         console.error(`🚨 EMERGENCY STOP: Hard limit $10 reached ($${budgetCheck.currentCost.toFixed(4)})`);
         session.status = 'failed';
+        session.updated_at = new Date();
+        await this.sessionStore.set(params.session_id, session);
         throw new Error(`Emergency stop: Cost exceeded $10 safety limit ($${budgetCheck.currentCost.toFixed(4)})`);
       }
       
@@ -209,8 +261,9 @@ export class ConsensusEngine {
     };
   }
 
-  analyzeDisagreementForSession(sessionId: string): DisagreementReport | null {
-    const session = this.sessions.get(sessionId);
+  async analyzeDisagreementForSession(sessionId: string): Promise<DisagreementReport | null> {
+    this.ensureInitialized();
+    const session = await this.sessionStore.get(sessionId);
     if (!session) {
       return null;
     }
@@ -218,7 +271,8 @@ export class ConsensusEngine {
   }
 
   async continueRound(sessionId: string, action: 'next_round' | 'finish_debate' | 'auto_complete', progressCallback?: (update: string) => void): Promise<PhoneAFriendResult> {
-    const session = this.sessions.get(sessionId);
+    this.ensureInitialized();
+    const session = await this.sessionStore.get(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
@@ -231,6 +285,8 @@ export class ConsensusEngine {
       }
 
       session.status = 'consensus';
+      session.updated_at = new Date();
+      await this.sessionStore.set(sessionId, session);
       return {
         status: 'consensus',
         final_answer: this.synthesizeFinalAnswer(lastRound),
@@ -250,13 +306,17 @@ export class ConsensusEngine {
       
       const roundResult = await this.conductRound(session, round, progressCallback);
       session.rounds.push(roundResult);
-      
+      session.updated_at = new Date();
+      await this.sessionStore.set(sessionId, session);
+
       const consensus = roundResult.consensus_score;
       if (consensus > 0.85) {
         progressCallback?.(`✅ **Runda ${round} klar** - Stark konsensus nådd! (${(consensus*100).toFixed(1)}%)`);
-        
+
         // Consensus reached
         session.status = 'consensus';
+        session.updated_at = new Date();
+        await this.sessionStore.set(sessionId, session);
         return {
           status: 'consensus',
           final_answer: this.synthesizeFinalAnswer(roundResult),
@@ -277,6 +337,8 @@ export class ConsensusEngine {
       if (budgetCheck.currentCost >= 10.0) {
         console.error(`🚨 EMERGENCY STOP: Hard limit $10 reached ($${budgetCheck.currentCost.toFixed(4)})`);
         session.status = 'failed';
+        session.updated_at = new Date();
+        await this.sessionStore.set(sessionId, session);
         throw new Error(`Emergency stop: Cost exceeded $10 safety limit ($${budgetCheck.currentCost.toFixed(4)})`);
       }
       
@@ -304,6 +366,8 @@ export class ConsensusEngine {
 
     // No consensus reached after all rounds
     session.status = 'deadlock';
+    session.updated_at = new Date();
+    await this.sessionStore.set(sessionId, session);
     return {
       status: 'intervention_needed',
       debate_log: session.rounds,
@@ -332,25 +396,32 @@ export class ConsensusEngine {
       const client = this.aiManager.getClient(provider);
       if (!client) throw new Error(`Client for ${provider} not available`);
 
+      console.error(`[DEBUG] ConsensusEngine: Starting request to ${provider} for round ${roundNumber}`);
+
       try {
         progressCallback?.(`🤖 Väntar på svar från ${providerNames[provider as keyof typeof providerNames]}...`);
+        console.error(`[DEBUG] ConsensusEngine: Calling ${provider}.generateResponse()...`);
+
         const response = await client.generateResponse(prompt);
+
+        console.error(`[DEBUG] ConsensusEngine: ${provider} responded successfully! Confidence: ${response.confidence}%, Tokens: ${response.tokens_used}, Cost: $${response.cost_usd.toFixed(6)}`);
         progressCallback?.(`✅ ${providerNames[provider as keyof typeof providerNames]} svarade (${response.confidence}% säkerhet)`);
-        
+
         this.costController.addCost(
-          session.id, 
-          provider, 
-          response.cost_usd, 
-          response.tokens_used, 
+          session.id,
+          provider,
+          response.cost_usd,
+          response.tokens_used,
           roundNumber
         );
         return { provider, response };
-      } catch (error) {
-        console.error(`Error getting response from ${provider}:`, error);
-        progressCallback?.(`❌ ${providerNames[provider as keyof typeof providerNames]} kunde inte svara - fel: ${error}`);
+      } catch (error: any) {
+        console.error(`[DEBUG] ConsensusEngine: ${provider} FAILED!`);
+        console.error(`[DEBUG] ConsensusEngine: Error from ${provider}:`, error?.message || error);
+        progressCallback?.(`❌ ${providerNames[provider as keyof typeof providerNames]} kunde inte svara - fel: ${error?.message || error}`);
         // Return a fallback response
-        return { 
-          provider, 
+        return {
+          provider,
           response: {
             content: `Error: Unable to get response from ${provider}`,
             confidence: 0,
@@ -363,9 +434,15 @@ export class ConsensusEngine {
     });
 
     const results = await Promise.all(responsePromises);
-    
-    // Map results to the expected format
+
+    // Map results to the expected format and count failures
+    let failedProviders = 0;
     results.forEach(({ provider, response }) => {
+      // Check if this is an error response
+      if (response.confidence === 0 && response.model === 'error') {
+        failedProviders++;
+      }
+
       switch (provider) {
         case 'openai':
           responses.openai = response;
@@ -380,6 +457,19 @@ export class ConsensusEngine {
       totalCost += response.cost_usd;
       totalTokens += response.tokens_used;
     });
+
+    // Require at least 2 out of 3 providers to succeed
+    if (failedProviders > 1) {
+      throw new Error(
+        `Too many AI providers failed (${failedProviders}/3). Cannot continue debate without at least 2 working providers.`
+      );
+    }
+
+    // If exactly 1 provider failed, log a warning
+    if (failedProviders === 1) {
+      console.error(`Warning: 1 AI provider failed. Continuing with 2 providers.`);
+      progressCallback?.(`⚠️ En AI-provider failade, fortsätter med 2 providers...`);
+    }
 
     // Ensure all required responses are present
     const roundResponses = {
@@ -462,11 +552,19 @@ Please provide your response, addressing the other AIs' points where relevant. I
   }
 
   private async calculateSemanticConsensus(responses: DebateRound['responses']): Promise<number> {
-    const contents = [
-      responses.openai.content,
-      responses.gemini.content,  
-      responses.claude.content
-    ];
+    // Filter out error responses
+    const validResponses = [
+      { name: 'openai', response: responses.openai },
+      { name: 'gemini', response: responses.gemini },
+      { name: 'claude', response: responses.claude }
+    ].filter(({ response }) => response.confidence > 0 && response.model !== 'error');
+
+    if (validResponses.length < 2) {
+      console.error('Not enough valid responses for consensus calculation');
+      return 0;
+    }
+
+    const contents = validResponses.map(({ response }) => response.content);
 
     try {
       // Use Python-based semantic consensus engine
@@ -524,12 +622,20 @@ Please provide your response, addressing the other AIs' points where relevant. I
   }
 
   private calculateJaccardFallback(responses: DebateRound['responses']): number {
+    // Filter out error responses
+    const validResponses = [
+      responses.openai,
+      responses.gemini,
+      responses.claude
+    ].filter(response => response.confidence > 0 && response.model !== 'error');
+
+    if (validResponses.length < 2) {
+      console.error('Not enough valid responses for Jaccard fallback');
+      return 0;
+    }
+
     // Original Jaccard algorithm as fallback
-    const contents = [
-      responses.openai.content.toLowerCase(),
-      responses.gemini.content.toLowerCase(),  
-      responses.claude.content.toLowerCase()
-    ];
+    const contents = validResponses.map(r => r.content.toLowerCase());
 
     let totalSimilarity = 0;
     let comparisons = 0;
@@ -682,7 +788,7 @@ Please provide your response, addressing the other AIs' points where relevant. I
       strategy: params.strategy || 'debate'
     };
 
-    this.sessions.set(sessionId, session);
+    // Session will be persisted by the caller
     return session;
   }
 
@@ -690,8 +796,9 @@ Please provide your response, addressing the other AIs' points where relevant. I
     return `session_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   }
 
-  formatInterventionSummary(sessionId: string): string {
-    const session = this.sessions.get(sessionId);
+  async formatInterventionSummary(sessionId: string): Promise<string> {
+    this.ensureInitialized();
+    const session = await this.sessionStore.get(sessionId);
     if (!session) return 'Session not found';
 
     const lastRound = session.rounds[session.rounds.length - 1];
@@ -738,8 +845,9 @@ Please provide your response, addressing the other AIs' points where relevant. I
 7. Abort and handle manually`;
   }
 
-  getDebateLog(sessionId: string, format: 'markdown' | 'plain_text' = 'markdown'): string | null {
-    const session = this.sessions.get(sessionId);
+  async getDebateLog(sessionId: string, format: 'markdown' | 'plain_text' = 'markdown'): Promise<string | null> {
+    this.ensureInitialized();
+    const session = await this.sessionStore.get(sessionId);
     if (!session) return null;
 
     if (format === 'plain_text') {
