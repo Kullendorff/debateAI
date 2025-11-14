@@ -93,27 +93,22 @@ Use `analyze_disagreement` with the session_id to understand why AIs disagree:
 - Resolvability score
 - Specific differences between positions
 
-### Detailed Debate Report
+### Automatic Detailed Debate Reports
 
-Use `get_debate_log` to generate a comprehensive round-by-round analysis:
+**Every debate automatically generates a comprehensive artifact** with round-by-round analysis. No need to request it separately!
 
-```
-get_debate_log with session_id and format (markdown or plain_text)
-```
-
-**Report includes:**
-- 📊 Round-by-round breakdown with all AI responses
-- 📈 Consensus evolution tracking (increases/decreases over time)
-- 💭 Confidence level changes for each AI per round
-- 🎯 Detailed cost breakdown (per AI, per round)
-- 📉 Final analysis explaining why consensus changed
+**Each report includes:**
+- 📊 Complete AI responses from every round
+- 📈 Consensus evolution tracking (shows ↑↓ changes between rounds)
+- 💭 Confidence level changes per AI (with ↑↑ indicators)
+- 🎯 Detailed cost breakdown (per AI, per round, with percentages)
+- 📉 Final analysis explaining why consensus increased/decreased
 - ⏱️ Duration and session metadata
+- 🟢🟡🔴 Color-coded consensus strength indicators
 
-**Perfect for:**
-- Exporting debates for documentation
-- Understanding how AI positions evolved
-- Analyzing cost efficiency per round
-- Sharing debate results with others
+**The artifact updates automatically** as the debate progresses in interactive mode.
+
+**Manual export (optional):** Use `get_debate_log` with session_id if you need to retrieve a report later
 
 ## Example Workflow
 

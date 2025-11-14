@@ -292,10 +292,31 @@ ${result.final_answer}
 
 ${this.formatCostSummary(result.cost_summary)}
 
-${this.formatRoundSummary(result.debate_log)}
+**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
 
-**Session ID:** \`${result.session_id}\`
-*Use get_debate_log with this session ID to get the full detailed log.*`;
+**Session ID:** \`${result.session_id}\``;
+
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText
+          },
+          {
+            type: 'text',
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
+            annotations: {
+              artifact: true,
+              identifier: `debate-report-${result.session_id}`,
+              title: '🤖 AI Konsensus-panel Debatt',
+              type: 'text/markdown'
+            }
+          }
+        ]
+      };
 
     } else if (result.status === 'consensus' && interactive) {
       // Interactive mode consensus
@@ -310,14 +331,13 @@ ${result.final_answer}
 
 ${this.formatCostSummary(result.cost_summary)}
 
-**📋 Se fullständig debatt-rapport i artifakten nedan**
+**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
 
-**Session ID:** \`${result.session_id}\`
-*Use get_debate_log with this session ID to get the full detailed log.*`;
+**Session ID:** \`${result.session_id}\``;
 
-      // Add artifact for consensus mode too
-      const artifactContent = this.generateArtifactContent(result.debate_log);
-      
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
       return {
         content: [
           {
@@ -326,7 +346,7 @@ ${this.formatCostSummary(result.cost_summary)}
           },
           {
             type: 'text',
-            text: artifactContent,
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
             annotations: {
               artifact: true,
               identifier: `debate-report-${result.session_id}`,
@@ -341,22 +361,23 @@ ${this.formatCostSummary(result.cost_summary)}
       // Interactive mode - first round completed, ask user
       const currentRound = result.debate_log.length;
       const consensus = result.debate_log.length > 0 ? (result.debate_log[result.debate_log.length - 1]!.consensus_score * 100).toFixed(1) : '0';
-      
+
       responseText = `## 🔄 **Runda ${currentRound}/${params.max_rounds} slutförd** (Konsensus: ${consensus}%)
 
 ${this.formatCostSummary(result.cost_summary)}
 
 **Vad vill du göra härnäst?**
 1. **Fortsätt till nästa runda** - \`continue_round\` med \`"action": "next_round"\`
-2. **Avsluta debatten nu** - \`continue_round\` med \`"action": "finish_debate"\`  
+2. **Avsluta debatten nu** - \`continue_round\` med \`"action": "finish_debate"\`
 3. **Kör alla återstående rundor** - \`continue_round\` med \`"action": "auto_complete"\`
+
+**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
 
 **Session ID:** \`${result.session_id}\``;
 
-      // Add artifact for interactive mode  
-      const artifactContent = this.generateArtifactContent(result.debate_log);
-      const sessionId = result.session_id;
-      
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
       return {
         content: [
           {
@@ -365,10 +386,10 @@ ${this.formatCostSummary(result.cost_summary)}
           },
           {
             type: 'text',
-            text: artifactContent,
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
             annotations: {
               artifact: true,
-              identifier: `debate-report-${sessionId}`,
+              identifier: `debate-report-${result.session_id}`,
               title: '🤖 AI Konsensus-panel Debatt',
               type: 'text/markdown'
             }
@@ -379,18 +400,31 @@ ${this.formatCostSummary(result.cost_summary)}
     } else {
       // Non-interactive deadlock - provide intervention summary
       responseText = await this.consensusEngine.formatInterventionSummary(result.session_id);
-      responseText += `\n\n${this.formatRoundSummary(result.debate_log)}`;
+      responseText += `\n\n**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**`;
       responseText += `\n\n**Session ID:** \`${result.session_id}\`\n\n*Use continue_debate tool to proceed with one of the options above.*`;
-    }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: responseText
-        }
-      ]
-    };
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText
+          },
+          {
+            type: 'text',
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
+            annotations: {
+              artifact: true,
+              identifier: `debate-report-${result.session_id}`,
+              title: '🤖 AI Konsensus-panel Debatt',
+              type: 'text/markdown'
+            }
+          }
+        ]
+      };
+    }
   }
 
   private async handleContinueDebate(args: any) {
@@ -435,7 +469,31 @@ ${result.final_answer}
 - Total rounds: ${result.debate_log.length}
 - Session: ${result.session_id}
 
-${this.formatCostSummary(result.cost_summary)}`;
+${this.formatCostSummary(result.cost_summary)}
+
+**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**`;
+
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText
+          },
+          {
+            type: 'text',
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
+            annotations: {
+              artifact: true,
+              identifier: `debate-report-${result.session_id}`,
+              title: '🤖 AI Konsensus-panel Debatt',
+              type: 'text/markdown'
+            }
+          }
+        ]
+      };
 
     } else {
       const interventionSummary = await this.consensusEngine.formatInterventionSummary(result.session_id);
@@ -445,17 +503,32 @@ The debate continued but consensus was not reached.
 
 ${interventionSummary}
 
-**Session ID:** \`${result.session_id}\``;
-    }
+**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: responseText
-        }
-      ]
-    };
+**Session ID:** \`${result.session_id}\``;
+
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText
+          },
+          {
+            type: 'text',
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
+            annotations: {
+              artifact: true,
+              identifier: `debate-report-${result.session_id}`,
+              title: '🤖 AI Konsensus-panel Debatt',
+              type: 'text/markdown'
+            }
+          }
+        ]
+      };
+    }
   }
 
   private async handleAnalyzeDisagreement(args: any) {
@@ -610,32 +683,13 @@ ${result.final_answer}
 
 ${this.formatCostSummary(result.cost_summary)}
 
-${this.formatRoundSummary(result.debate_log)}
-
-**Session ID:** \`${result.session_id}\`
-*Use get_debate_log with this session ID to get the full detailed log.*`;
-
-    } else {
-      // Still needs intervention or continue
-      const currentRound = result.debate_log.length;
-      const maxRounds = 3; // TODO: get from session
-      
-      responseText = `## 🔄 **Runda ${currentRound}/${maxRounds} slutförd** (Konsensus: ${result.debate_log.length > 0 ? (result.debate_log[result.debate_log.length - 1]!.consensus_score * 100).toFixed(1) : '0'}%)
-
-${this.formatCostSummary(result.cost_summary)}
-
-**Vad vill du göra härnäst?**
-1. **Fortsätt till nästa runda** - \`continue_round\` med \`"action": "next_round"\`
-2. **Avsluta debatten nu** - \`continue_round\` med \`"action": "finish_debate"\`  
-3. **Kör alla återstående rundor** - \`continue_round\` med \`"action": "auto_complete"\`
-
-**📋 Se fullständig debatt-rapport i artifakten nedan**
+**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
 
 **Session ID:** \`${result.session_id}\``;
 
-      // Add artifact for continue_round too
-      const artifactContent = this.generateArtifactContent(result.debate_log);
-      
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
       return {
         content: [
           {
@@ -643,8 +697,48 @@ ${this.formatCostSummary(result.cost_summary)}
             text: responseText
           },
           {
-            type: 'text', 
-            text: artifactContent,
+            type: 'text',
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
+            annotations: {
+              artifact: true,
+              identifier: `debate-report-${result.session_id}`,
+              title: '🤖 AI Konsensus-panel Debatt',
+              type: 'text/markdown'
+            }
+          }
+        ]
+      };
+
+    } else {
+      // Still needs intervention or continue
+      const currentRound = result.debate_log.length;
+      const maxRounds = 3; // TODO: get from session
+
+      responseText = `## 🔄 **Runda ${currentRound}/${maxRounds} slutförd** (Konsensus: ${result.debate_log.length > 0 ? (result.debate_log[result.debate_log.length - 1]!.consensus_score * 100).toFixed(1) : '0'}%)
+
+${this.formatCostSummary(result.cost_summary)}
+
+**Vad vill du göra härnäst?**
+1. **Fortsätt till nästa runda** - \`continue_round\` med \`"action": "next_round"\`
+2. **Avsluta debatten nu** - \`continue_round\` med \`"action": "finish_debate"\`
+3. **Kör alla återstående rundor** - \`continue_round\` med \`"action": "auto_complete"\`
+
+**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
+
+**Session ID:** \`${result.session_id}\``;
+
+      // Get detailed debate report
+      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText
+          },
+          {
+            type: 'text',
+            text: detailedReport || this.generateArtifactContent(result.debate_log),
             annotations: {
               artifact: true,
               identifier: `debate-report-${result.session_id}`,
@@ -655,15 +749,6 @@ ${this.formatCostSummary(result.cost_summary)}
         ]
       };
     }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: responseText
-        }
-      ]
-    };
   }
 
   private async handleGetDebateLog(args: any) {
