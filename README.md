@@ -95,7 +95,7 @@ Use `analyze_disagreement` with the session_id to understand why AIs disagree:
 
 ### Automatic Detailed Debate Reports
 
-**Every debate automatically generates a comprehensive artifact** with round-by-round analysis. No need to request it separately!
+**Every debate automatically generates a comprehensive markdown report** saved to `.sessions/debate-report-{session_id}.md`. No need to request it separately!
 
 **Each report includes:**
 - 📊 Complete AI responses from every round
@@ -106,7 +106,9 @@ Use `analyze_disagreement` with the session_id to understand why AIs disagree:
 - ⏱️ Duration and session metadata
 - 🟢🟡🔴 Color-coded consensus strength indicators
 
-**The artifact updates automatically** as the debate progresses in interactive mode.
+**The report file updates automatically** as the debate progresses in interactive mode.
+
+**You'll receive the file path** after each debate completion - just open it in your markdown editor or text viewer!
 
 **Manual export (optional):** Use `get_debate_log` with session_id if you need to retrieve a report later
 
@@ -121,10 +123,15 @@ Claude: I'll convene the AI panel to discuss this question.
 🚨 AI Panel Deadlock - Round 3/3
 
 GPT-4: AGI unlikely before 2030 due to technical challenges (75% confidence)
-Claude: Possible but depends on breakthroughs (60% confidence)  
+Claude: Possible but depends on breakthroughs (60% confidence)
 Gemini: Very unlikely, needs more research (80% confidence)
 
 Cost: $0.73/$2.00
+
+📋 Detaljerad rapport sparad:
+`C:\phone-friend-mcp-v2\.sessions\debate-report-session_12345.md`
+
+*Öppna filen för fullständig runda-för-runda analys.*
 
 Your options:
 1. Continue 2 more rounds
@@ -136,6 +143,8 @@ User: "Continue 2 more rounds"
 
 Claude: [Calls continue_debate with continue_2_rounds...]
 ```
+
+The report file updates automatically as the debate continues!
 
 ## Cost Management
 

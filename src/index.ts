@@ -2,8 +2,8 @@
 
 // CRITICAL: MCP protocol requires clean stdout (only JSON)
 // Load .env manually to avoid dotenv's stdout pollution
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { resolve, join } from 'path';
 
 // Manually parse .env file without any output
 try {
@@ -279,6 +279,9 @@ class PhoneAFriendMCPServer {
     let responseText = '';
 
     if (result.status === 'consensus' && !interactive) {
+      // Save detailed report to file
+      const reportPath = await this.saveDebateReport(result.session_id);
+
       responseText = `## ✅ AI Panel Consensus Reached!
 
 **Question:** ${params.question}
@@ -292,34 +295,17 @@ ${result.final_answer}
 
 ${this.formatCostSummary(result.cost_summary)}
 
-**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
+**📋 Detaljerad rapport sparad:**
+\`${reportPath}\`
+
+*Öppna filen för fullständig runda-för-runda analys med konsensusutveckling, konfidensförändringar och kostnadsuppdelning.*
 
 **Session ID:** \`${result.session_id}\``;
 
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
-
     } else if (result.status === 'consensus' && interactive) {
-      // Interactive mode consensus
+      // Interactive mode consensus - save report
+      const reportPath = await this.saveDebateReport(result.session_id);
+
       responseText = `## ✅ AI Panel Consensus Reached!
 
 **Consensus Answer:**
@@ -331,34 +317,16 @@ ${result.final_answer}
 
 ${this.formatCostSummary(result.cost_summary)}
 
-**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
+**📋 Detaljerad rapport sparad:**
+\`${reportPath}\`
+
+*Öppna filen för fullständig runda-för-runda analys med konsensusutveckling, konfidensförändringar och kostnadsuppdelning.*
 
 **Session ID:** \`${result.session_id}\``;
 
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
-
     } else if (interactive) {
-      // Interactive mode - first round completed, ask user
+      // Interactive mode - paused after round, save report
+      const reportPath = await this.saveDebateReport(result.session_id);
       const currentRound = result.debate_log.length;
       const consensus = result.debate_log.length > 0 ? (result.debate_log[result.debate_log.length - 1]!.consensus_score * 100).toFixed(1) : '0';
 
@@ -371,60 +339,31 @@ ${this.formatCostSummary(result.cost_summary)}
 2. **Avsluta debatten nu** - \`continue_round\` med \`"action": "finish_debate"\`
 3. **Kör alla återstående rundor** - \`continue_round\` med \`"action": "auto_complete"\`
 
-**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
+**📋 Detaljerad rapport sparad:**
+\`${reportPath}\`
+
+*Rapporten uppdateras automatiskt när debatten fortsätter.*
 
 **Session ID:** \`${result.session_id}\``;
 
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
-
     } else {
-      // Non-interactive deadlock - provide intervention summary
+      // Non-interactive deadlock - save report
+      const reportPath = await this.saveDebateReport(result.session_id);
       responseText = await this.consensusEngine.formatInterventionSummary(result.session_id);
-      responseText += `\n\n**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**`;
+      responseText += `\n\n**📋 Detaljerad rapport sparad:**`;
+      responseText += `\n\`${reportPath}\`\n`;
+      responseText += `\n*Öppna filen för fullständig runda-för-runda analys.*`;
       responseText += `\n\n**Session ID:** \`${result.session_id}\`\n\n*Use continue_debate tool to proceed with one of the options above.*`;
-
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
     }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: responseText
+        }
+      ]
+    };
   }
 
   private async handleContinueDebate(args: any) {
@@ -458,6 +397,7 @@ ${this.formatCostSummary(result.cost_summary)}
     let responseText = '';
 
     if (result.status === 'consensus') {
+      const reportPath = await this.saveDebateReport(result.session_id);
       responseText = `## ✅ Debate Resolved!
 
 **Final Answer:**
@@ -471,31 +411,13 @@ ${result.final_answer}
 
 ${this.formatCostSummary(result.cost_summary)}
 
-**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**`;
+**📋 Detaljerad rapport sparad:**
+\`${reportPath}\`
 
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
+*Öppna filen för fullständig runda-för-runda analys.*`;
 
     } else {
+      const reportPath = await this.saveDebateReport(result.session_id);
       const interventionSummary = await this.consensusEngine.formatInterventionSummary(result.session_id);
       responseText = `## 🚨 Still No Consensus
 
@@ -503,32 +425,22 @@ The debate continued but consensus was not reached.
 
 ${interventionSummary}
 
-**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
+**📋 Detaljerad rapport sparad:**
+\`${reportPath}\`
+
+*Öppna filen för fullständig runda-för-runda analys.*
 
 **Session ID:** \`${result.session_id}\``;
-
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
     }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: responseText
+        }
+      ]
+    };
   }
 
   private async handleAnalyzeDisagreement(args: any) {
@@ -672,6 +584,7 @@ ${this.getRecommendations(analysis.disagreement_type, analysis.resolvability_sco
     let responseText = '';
 
     if (result.status === 'consensus') {
+      const reportPath = await this.saveDebateReport(result.session_id);
       responseText = `## ✅ AI Panel Consensus Reached!
 
 **Final Answer:**
@@ -683,34 +596,16 @@ ${result.final_answer}
 
 ${this.formatCostSummary(result.cost_summary)}
 
-**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
+**📋 Detaljerad rapport sparad:**
+\`${reportPath}\`
+
+*Öppna filen för fullständig runda-för-runda analys.*
 
 **Session ID:** \`${result.session_id}\``;
 
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
-
     } else {
       // Still needs intervention or continue
+      const reportPath = await this.saveDebateReport(result.session_id);
       const currentRound = result.debate_log.length;
       const maxRounds = 3; // TODO: get from session
 
@@ -723,32 +618,22 @@ ${this.formatCostSummary(result.cost_summary)}
 2. **Avsluta debatten nu** - \`continue_round\` med \`"action": "finish_debate"\`
 3. **Kör alla återstående rundor** - \`continue_round\` med \`"action": "auto_complete"\`
 
-**📋 Fullständig debatt-rapport med runda-för-runda analys nedan**
+**📋 Detaljerad rapport sparad:**
+\`${reportPath}\`
+
+*Rapporten uppdateras automatiskt när debatten fortsätter.*
 
 **Session ID:** \`${result.session_id}\``;
-
-      // Get detailed debate report
-      const detailedReport = await this.consensusEngine.getDebateLog(result.session_id, 'markdown');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: responseText
-          },
-          {
-            type: 'text',
-            text: detailedReport || this.generateArtifactContent(result.debate_log),
-            annotations: {
-              artifact: true,
-              identifier: `debate-report-${result.session_id}`,
-              title: '🤖 AI Konsensus-panel Debatt - Uppdaterad',
-              type: 'text/markdown'
-            }
-          }
-        ]
-      };
     }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: responseText
+        }
+      ]
+    };
   }
 
   private async handleGetDebateLog(args: any) {
@@ -792,6 +677,33 @@ ${this.formatCostSummary(result.cost_summary)}
     if (hasAnthropic) configured.push('Anthropic');
 
     console.error(`Environment validated. Configured providers: ${configured.join(', ')}`);
+  }
+
+  /**
+   * Save debate report as markdown file
+   * Returns the absolute file path
+   */
+  private async saveDebateReport(sessionId: string): Promise<string> {
+    const sessionsDir = resolve(process.cwd(), '.sessions');
+
+    // Ensure .sessions directory exists
+    if (!existsSync(sessionsDir)) {
+      mkdirSync(sessionsDir, { recursive: true });
+    }
+
+    // Get detailed report
+    const report = await this.consensusEngine.getDebateLog(sessionId, 'markdown');
+    if (!report) {
+      throw new Error(`Could not generate report for session ${sessionId}`);
+    }
+
+    // Save to file
+    const fileName = `debate-report-${sessionId}.md`;
+    const filePath = join(sessionsDir, fileName);
+    writeFileSync(filePath, report, 'utf-8');
+
+    console.error(`Debate report saved: ${filePath}`);
+    return filePath;
   }
 
   /**
