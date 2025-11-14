@@ -7,7 +7,9 @@ import { resolve, join } from 'path';
 
 // Manually parse .env file without any output
 try {
-  const envPath = resolve(process.cwd(), '.env');
+  // Use __dirname to find project root (this file will be in build/ after compilation)
+  const projectRoot = resolve(__dirname, '..');
+  const envPath = resolve(projectRoot, '.env');
   const envFile = readFileSync(envPath, 'utf-8');
 
   for (const line of envFile.split('\n')) {
@@ -48,8 +50,12 @@ class PhoneAFriendMCPServer {
   private consensusEngine: ConsensusEngine;
   private aiManager: AIClientManager;
   private cleanupTimer?: NodeJS.Timeout;
+  private projectRoot: string;
 
   constructor() {
+    // Set project root (this file will be in build/ after compilation)
+    this.projectRoot = resolve(__dirname, '..');
+
     // Validate environment variables at startup
     this.validateEnvironment();
 
@@ -684,7 +690,7 @@ ${this.formatCostSummary(result.cost_summary)}
    * Returns the absolute file path
    */
   private async saveDebateReport(sessionId: string): Promise<string> {
-    const sessionsDir = resolve(process.cwd(), '.sessions');
+    const sessionsDir = resolve(this.projectRoot, '.sessions');
 
     // Ensure .sessions directory exists
     if (!existsSync(sessionsDir)) {
@@ -692,13 +698,13 @@ ${this.formatCostSummary(result.cost_summary)}
     }
 
     // Get detailed report
-    const report = await this.consensusEngine.getDebateLog(sessionId, 'markdown');
+    const report = await this.consensusEngine.getDebateLog(sessionId, 'html');
     if (!report) {
       throw new Error(`Could not generate report for session ${sessionId}`);
     }
 
     // Save to file
-    const fileName = `debate-report-${sessionId}.md`;
+    const fileName = `debate-report-${sessionId}.html`;
     const filePath = join(sessionsDir, fileName);
     writeFileSync(filePath, report, 'utf-8');
 

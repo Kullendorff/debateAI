@@ -179,12 +179,12 @@ export class ConsensusEngine {
       }
 
       const selectedResponse = lastRound.responses[params.selected_ai];
-      session.status = 'consensus';
+      session.status = 'user_accepted';
       session.updated_at = new Date();
       await this.sessionStore.set(params.session_id, session);
 
       return {
-        status: 'consensus',
+        status: 'user_accepted',
         final_answer: selectedResponse.content,
         debate_log: session.rounds,
         cost_summary: this.costController.getCostBreakdown(params.session_id)!,
@@ -195,12 +195,12 @@ export class ConsensusEngine {
     if (params.instruction === 'synthesize_and_stop') {
       const lastRound = session.rounds[session.rounds.length - 1];
       const synthesized = this.synthesizeFinalAnswer(lastRound!);
-      session.status = 'consensus';
+      session.status = 'manually_resolved';
       session.updated_at = new Date();
       await this.sessionStore.set(params.session_id, session);
 
       return {
-        status: 'consensus',
+        status: 'manually_resolved',
         final_answer: synthesized,
         debate_log: session.rounds,
         cost_summary: this.costController.getCostBreakdown(params.session_id)!,
@@ -495,15 +495,17 @@ export class ConsensusEngine {
 
   private generatePromptForRound(session: DebateSession, roundNumber: number): string {
     if (roundNumber === 1) {
-      let prompt = `You are participating in an AI consensus panel to answer this question:
+      let prompt = `Du deltar i en AI-konsensuspanel för att besvara denna fråga:
 
-**Question:** ${session.question}`;
+**Fråga:** ${session.question}`;
 
       if (session.context) {
-        prompt += `\n\n**Context:** ${session.context}`;
+        prompt += `\n\n**Kontext:** ${session.context}`;
       }
 
-      prompt += `\n\nPlease provide your best answer to this question. Be thorough but concise. If you have a confidence level in your answer, please indicate it as a percentage.`;
+      prompt += `\n\nVänligen ge ditt bästa svar på denna fråga. Var grundlig men koncis. Om du har en konfidensnivå i ditt svar, vänligen ange den som en procentsats.
+
+**VIKTIGT:** Svara på SVENSKA.`;
 
       return prompt;
     }
@@ -514,36 +516,38 @@ export class ConsensusEngine {
     }
 
     const instruction = this.getDebateInstruction(roundNumber);
-    
-    return `You are in round ${roundNumber} of an AI consensus panel discussing this question:
 
-**Question:** ${session.question}
+    return `Du är i runda ${roundNumber} av en AI-konsensuspanel som diskuterar denna fråga:
 
-**Previous responses from round ${roundNumber - 1}:**
+**Fråga:** ${session.question}
+
+**Tidigare svar från runda ${roundNumber - 1}:**
 
 **OpenAI (GPT):** ${lastRound.responses.openai.content}
-(Confidence: ${lastRound.responses.openai.confidence}%)
+(Konfidens: ${lastRound.responses.openai.confidence}%)
 
 **Google (Gemini):** ${lastRound.responses.gemini.content}
-(Confidence: ${lastRound.responses.gemini.confidence}%)
+(Konfidens: ${lastRound.responses.gemini.confidence}%)
 
 **Anthropic (Claude):** ${lastRound.responses.claude.content}
-(Confidence: ${lastRound.responses.claude.confidence}%)
+(Konfidens: ${lastRound.responses.claude.confidence}%)
 
-**Instructions for this round:**
+**Instruktioner för denna runda:**
 ${instruction}
 
-Please provide your response, addressing the other AIs' points where relevant. Include your confidence level as a percentage.`;
+Vänligen ge ditt svar, och bemöt de andra AI:ernas poänger där det är relevant. Inkludera din konfidensnivå som en procentsats.
+
+**VIKTIGT:** Svara på SVENSKA.`;
   }
 
   private getDebateInstruction(round: number): string {
     const instructions: Record<number, string> = {
-      2: "Analyze the other responses. Where do you agree or disagree? Provide evidence or reasoning for your position. Focus on identifying the strongest arguments.",
-      3: "This is the final round. Push toward consensus by finding common ground, or clearly state your fundamental disagreement and why it cannot be resolved.",
-      4: "Focus on synthesis. What can all parties agree on? Try to build a unified answer that incorporates the best insights from all perspectives.",
-      5: "Last chance for consensus. Either converge on a unified answer or clearly articulate why the disagreement is irreconcilable."
+      2: "Analysera de andra svaren. Var håller du med eller inte? Ge bevis eller resonemang för din ståndpunkt. Fokusera på att identifiera de starkaste argumenten.",
+      3: "Detta är den sista rundan. Driva mot konsensus genom att hitta gemensam mark, eller tydligt ange din fundamentala oenighet och varför den inte kan lösas.",
+      4: "Fokusera på syntes. Vad kan alla parter hålla med om? Försök bygga ett enhetligt svar som inkorporerar de bästa insikterna från alla perspektiv.",
+      5: "Sista chansen för konsensus. Antingen konvergera till ett enhetligt svar eller tydligt formulera varför oenigheten är oöverstiglig."
     };
-    
+
     return instructions[round] || instructions[3];
   }
 
@@ -671,9 +675,9 @@ Please provide your response, addressing the other AIs' points where relevant. I
 
     // Find the longest response as the base
     const longestResponse = responses.reduce((a, b) => a.length > b.length ? a : b);
-    
+
     // Simple synthesis - in a real implementation, this could use LLM to synthesize
-    return `Based on the AI panel consensus:\n\n${longestResponse}\n\n(This answer represents the converged position of the AI panel)`;
+    return `Baserat på AI-panelens konsensus:\n\n${longestResponse}\n\n(Detta svar representerar AI-panelens konvergerade position)`;
   }
 
   private analyzeDisagreement(rounds: DebateRound[]): DisagreementReport {
@@ -845,13 +849,15 @@ Please provide your response, addressing the other AIs' points where relevant. I
 7. Abort and handle manually`;
   }
 
-  async getDebateLog(sessionId: string, format: 'markdown' | 'plain_text' = 'markdown'): Promise<string | null> {
+  async getDebateLog(sessionId: string, format: 'markdown' | 'plain_text' | 'html' = 'html'): Promise<string | null> {
     this.ensureInitialized();
     const session = await this.sessionStore.get(sessionId);
     if (!session) return null;
 
     if (format === 'plain_text') {
       return this.formatDebateLogPlainText(session);
+    } else if (format === 'html') {
+      return this.formatDebateLogHTML(session);
     } else {
       return this.formatDebateLogMarkdown(session);
     }
@@ -994,10 +1000,15 @@ Please provide your response, addressing the other AIs' points where relevant. I
     }
 
     log += `\n---\n\n`;
-    log += `## ✅ DEBATT ${session.status === 'consensus' ? 'SLUTFÖRD MED KONSENSUS' : 'AVSLUTAD'}\n\n`;
+    const statusHeader = session.status === 'consensus' ? 'SLUTFÖRD MED KONSENSUS (≥85%)' :
+                        session.status === 'user_accepted' ? 'AVSLUTAD - ANVÄNDAREN ACCEPTERADE ETT SVAR' :
+                        session.status === 'manually_resolved' ? 'AVSLUTAD - ANVÄNDAREN SYNTETISERADE POSITIONERNA' :
+                        'AVSLUTAD';
+    log += `## ✅ DEBATT ${statusHeader}\n\n`;
     log += `**Session ID:** \`${session.id}\`\n`;
     log += `**Varaktighet:** ${this.calculateDuration(session)}\n`;
     log += `**Antal rundor:** ${session.rounds.length}/${session.max_rounds}\n`;
+    log += `**Slutlig konsensusnivå:** ${session.rounds.length > 0 ? (session.rounds[session.rounds.length-1]!.consensus_score * 100).toFixed(1) + '%' : 'N/A'}\n`;
     log += `**Läge:** ${interactiveMode}\n`;
 
     return log;
@@ -1007,6 +1018,8 @@ Please provide your response, addressing the other AIs' points where relevant. I
     const emojis: {[key: string]: string} = {
       'active': '🔄',
       'consensus': '✅',
+      'user_accepted': '👤',
+      'manually_resolved': '🤝',
       'deadlock': '🚨',
       'paused': '⏸️',
       'failed': '❌'
@@ -1102,8 +1115,615 @@ Please provide your response, addressing the other AIs' points where relevant. I
 
     log += `\n${'-'.repeat(70)}\n`;
     log += `Genererat av Phone-a-Friend MCP v2 - AI Konsensus Panel`;
-    
+
     return log;
+  }
+
+  private formatDebateLogHTML(session: DebateSession): string {
+    const costBreakdown = this.costController.getCostBreakdown(session.id);
+    const startTime = session.created_at.toLocaleString('sv-SE');
+    const questionPreview = session.question.substring(0, 60) + (session.question.length > 60 ? '...' : '');
+
+    // Calculate consensus trend
+    const firstConsensus = session.rounds[0]?.consensus_score * 100 || 0;
+    const lastConsensus = session.rounds[session.rounds.length - 1]?.consensus_score * 100 || 0;
+    const consensusTrend = lastConsensus - firstConsensus;
+
+    let html = `<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${this.escapeHtml(questionPreview)} - AI-paneldebatt</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            line-height: 1.65;
+            color: #1a1a1a;
+            background: #fafafa;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 820px;
+            margin: 0 auto;
+            background: white;
+            padding: 70px 50px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            font-size: 2.4em;
+            font-weight: 700;
+            color: #000;
+            margin-bottom: 8px;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+        }
+
+        h2 {
+            font-size: 1.7em;
+            font-weight: 600;
+            color: #000;
+            margin-top: 64px;
+            margin-bottom: 20px;
+            letter-spacing: -0.02em;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e5e5e5;
+        }
+
+        h3 {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-top: 40px;
+            margin-bottom: 16px;
+        }
+
+        .subtitle {
+            font-size: 1.15em;
+            color: #666;
+            margin-bottom: 48px;
+            font-weight: 400;
+        }
+
+        .meta-info {
+            background: #fffbeb;
+            padding: 24px;
+            margin: 32px 0;
+            border-left: 3px solid #f59e0b;
+        }
+
+        .observation {
+            background: #f0f9ff;
+            padding: 24px;
+            margin: 28px 0;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .ai-response {
+            background: #fafafa;
+            padding: 28px;
+            margin: 24px 0;
+            border-left: 4px solid #d0d0d0;
+            line-height: 1.8;
+        }
+
+        .ai-gpt .ai-response {
+            border-left-color: #10a37f;
+            background: #f7fcfa;
+        }
+
+        .ai-claude .ai-response {
+            border-left-color: #d97706;
+            background: #fffbf5;
+        }
+
+        .ai-gemini .ai-response {
+            border-left-color: #2563eb;
+            background: #f7f9fc;
+        }
+
+        .ai-gpt h3 {
+            color: #0d8c6d;
+        }
+
+        .ai-claude h3 {
+            color: #c2640f;
+        }
+
+        .ai-gemini h3 {
+            color: #1d4ed8;
+        }
+
+        .round-header {
+            background: #f5f5f5;
+            padding: 24px;
+            margin: 52px 0 28px 0;
+            border-left: 4px solid #404040;
+        }
+
+        .round-header h3 {
+            margin: 0 0 10px 0;
+            color: #000;
+            font-size: 1.25em;
+        }
+
+        .round-header p {
+            margin: 0;
+            color: #555;
+            font-size: 0.95em;
+        }
+
+        .stats {
+            background: #f9fafb;
+            padding: 28px;
+            margin: 32px 0;
+            border: 1px solid #e5e7eb;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 32px 0;
+            font-size: 0.95em;
+        }
+
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        th {
+            background: #fafafa;
+            color: #1a1a1a;
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        tr:hover {
+            background: #fafafa;
+        }
+
+        .conclusion {
+            background: #f9fafb;
+            padding: 36px;
+            margin: 52px 0;
+            border-left: 4px solid #374151;
+            border: 1px solid #e5e7eb;
+        }
+
+        .conclusion h3 {
+            margin-top: 0;
+            color: #000;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 80px;
+            padding-top: 40px;
+            border-top: 1px solid #e5e5e5;
+            color: #999;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e5e5e5;
+            margin: 64px 0;
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: #f5f5f5;
+            color: #525252;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            margin-left: 8px;
+            font-weight: 500;
+            border: 1px solid #e5e5e5;
+        }
+
+        .confidence {
+            color: #059669;
+            font-weight: 600;
+        }
+
+        .consensus {
+            color: #dc2626;
+            font-weight: 600;
+        }
+
+        p {
+            margin: 16px 0;
+            color: #2a2a2a;
+        }
+
+        code {
+            background: #f5f5f5;
+            color: #1a1a1a;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 0.9em;
+            border: 1px solid #e5e5e5;
+        }
+
+        strong {
+            color: #000;
+            font-weight: 600;
+        }
+
+        .trend-up { color: #059669; }
+        .trend-down { color: #dc2626; }
+        .trend-stable { color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>${this.escapeHtml(questionPreview)}</h1>
+        <p class="subtitle">AI-paneldebatt med GPT-4o, Claude och Gemini</p>
+
+        <div class="meta-info">
+            <p><strong>Fråga:</strong> ${this.escapeHtml(session.question)}</p>
+            ${session.context ? `<p><strong>Kontext:</strong> ${this.escapeHtml(session.context)}</p>` : ''}
+            <p><strong>Startad:</strong> ${startTime}</p>
+            <p><strong>Status:</strong> ${this.getStatusText(session.status)}</p>
+            <p><strong>Antal rundor:</strong> ${session.rounds.length}/${session.max_rounds}</p>
+            <p><strong>Total kostnad:</strong> $${costBreakdown?.total_cost_usd.toFixed(4) || '0'} (~${((costBreakdown?.total_cost_usd || 0) * 10).toFixed(0)} öre)</p>
+        </div>
+
+        <h2>SAMMANFATTNING</h2>
+
+        <div class="stats">
+            <p><strong>Konsensusutveckling:</strong></p>
+            <p><code>Start: ${firstConsensus.toFixed(1)}% → Slut: ${lastConsensus.toFixed(1)}%
+            <span class="${consensusTrend > 5 ? 'trend-up' : consensusTrend < -5 ? 'trend-down' : 'trend-stable'}">
+            ${consensusTrend > 0 ? '↑' : consensusTrend < 0 ? '↓' : '→'} ${consensusTrend > 0 ? '+' : ''}${consensusTrend.toFixed(1)}%
+            </span></code></p>
+
+            <p><strong>Konfidensutveckling:</strong></p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Runda</th>
+                        <th>GPT-4o</th>
+                        <th>Claude</th>
+                        <th>Gemini</th>
+                        <th>Konsensus</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+    session.rounds.forEach(round => {
+      html += `
+                    <tr>
+                        <td><strong>${round.round_number}</strong></td>
+                        <td>${round.responses.openai.confidence}%</td>
+                        <td>${round.responses.claude.confidence}%</td>
+                        <td>${round.responses.gemini.confidence}%</td>
+                        <td class="${round.consensus_score > 0.7 ? 'confidence' : round.consensus_score > 0.5 ? '' : 'consensus'}">${(round.consensus_score * 100).toFixed(1)}%</td>
+                    </tr>`;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+
+        <h2>DEBATTENS FÖRLOPP</h2>`;
+
+    // Generate round-by-round breakdown
+    session.rounds.forEach((round, index) => {
+      const roundTitle = index === 0 ? 'Grundläggande positioner' :
+                        index === session.rounds.length - 1 ? 'Slutgiltig konsensus (FINAL)' :
+                        `Fördjupad analys runda ${round.round_number}`;
+
+      const avgConf = ((round.responses.openai.confidence + round.responses.claude.confidence + round.responses.gemini.confidence) / 3).toFixed(1);
+
+      html += `
+        <div class="round-header">
+            <h3>Runda ${round.round_number}: ${roundTitle}</h3>
+            <p><span class="consensus">Konsensus: ${(round.consensus_score * 100).toFixed(1)}%</span> |
+               <span class="confidence">Genomsnittlig konfidens: ${avgConf}%</span> |
+               Kostnad: $${round.cost_usd.toFixed(4)}</p>
+        </div>
+
+        <div class="ai-gpt">
+            <h3>🤖 GPT-4o <span class="version-badge">${round.responses.openai.confidence}% konfidens</span></h3>
+            <div class="ai-response">
+                ${this.formatTextToHTML(round.responses.openai.content)}
+            </div>
+        </div>
+
+        <div class="ai-claude">
+            <h3>🧠 Claude Sonnet 4 <span class="version-badge">${round.responses.claude.confidence}% konfidens</span></h3>
+            <div class="ai-response">
+                ${this.formatTextToHTML(round.responses.claude.content)}
+            </div>
+        </div>
+
+        <div class="ai-gemini">
+            <h3>🌟 Gemini <span class="version-badge">${round.responses.gemini.confidence}% konfidens</span></h3>
+            <div class="ai-response">
+                ${this.formatTextToHTML(round.responses.gemini.content)}
+            </div>
+        </div>
+
+        ${index < session.rounds.length - 1 ? '<hr>' : ''}`;
+    });
+
+    // Observations and Analysis Section
+    html += this.generateObservationsSection(session);
+
+    // Cost breakdown
+    if (costBreakdown) {
+      html += `
+        <h2>KOSTNADSSAMMANSTÄLLNING</h2>
+
+        <div class="stats">
+            <p><strong>Total kostnad:</strong> $${costBreakdown.total_cost_usd.toFixed(4)} (~${(costBreakdown.total_cost_usd * 10).toFixed(0)} öre)</p>
+            <p><strong>Totala tokens:</strong> ${costBreakdown.tokens_used.toLocaleString()}</p>
+
+            <h3 style="margin-top: 24px;">Per AI (hela debatten):</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>AI</th>
+                        <th>Kostnad</th>
+                        <th>Andel</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>OpenAI (GPT-4o)</td>
+                        <td>$${costBreakdown.by_model.openai.toFixed(4)}</td>
+                        <td>${((costBreakdown.by_model.openai / costBreakdown.total_cost_usd) * 100).toFixed(0)}%</td>
+                    </tr>
+                    <tr>
+                        <td>Anthropic (Claude)</td>
+                        <td>$${costBreakdown.by_model.claude.toFixed(4)}</td>
+                        <td>${((costBreakdown.by_model.claude / costBreakdown.total_cost_usd) * 100).toFixed(0)}%</td>
+                    </tr>
+                    <tr>
+                        <td>Google (Gemini)</td>
+                        <td>$${costBreakdown.by_model.gemini.toFixed(4)}</td>
+                        <td>${((costBreakdown.by_model.gemini / costBreakdown.total_cost_usd) * 100).toFixed(0)}%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>`;
+    }
+
+    // Footer with summary
+    html += `
+        <hr>
+
+        <div class="footer">
+            <p><strong>Debattens totala kostnad:</strong> $${costBreakdown?.total_cost_usd.toFixed(4) || '0'} (~${((costBreakdown?.total_cost_usd || 0) * 10).toFixed(0)} öre)</p>
+            <p><strong>Varaktighet:</strong> ${this.calculateDuration(session)}</p>
+            <p><strong>Status:</strong> ${this.getStatusText(session.status)}</p>
+            <p><strong>Konsensus uppnådd:</strong> ${session.status === 'consensus' ? 'Ja (≥85%)' : 'Nej'} (slutlig nivå: ${lastConsensus.toFixed(1)}%)</p>
+            <p><strong>Var det värt det:</strong> ${this.generateWorthItStatement(session)}</p>
+
+            <p style="margin-top: 30px; font-size: 0.85em; color: #666;">
+                Genererat av <strong>Phone-a-Friend MCP v2</strong><br>
+                AI Konsensus Panel: GPT-4o, Claude Sonnet 4, Gemini<br>
+                ${new Date().toLocaleString('sv-SE')}<br>
+                Session ID: <code>${session.id}</code>
+            </p>
+
+            ${this.generateDebateQuote(session)}
+        </div>
+    </div>
+</body>
+</html>`;
+
+    return html;
+  }
+
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  private formatTextToHTML(text: string): string {
+    // Convert newlines to paragraphs, preserve basic formatting
+    return text
+      .split('\n\n')
+      .map(para => `<p>${this.escapeHtml(para).replace(/\n/g, '<br>')}</p>`)
+      .join('');
+  }
+
+  private generateObservationsSection(session: DebateSession): string {
+    // Calculate confidence and consensus trends
+    const confidenceByRound = session.rounds.map(r => ({
+      round: r.round_number,
+      gpt: r.responses.openai.confidence,
+      claude: r.responses.claude.confidence,
+      gemini: r.responses.gemini.confidence,
+      avg: (r.responses.openai.confidence + r.responses.claude.confidence + r.responses.gemini.confidence) / 3,
+      consensus: r.consensus_score * 100
+    }));
+
+    const firstRound = confidenceByRound[0];
+    const lastRound = confidenceByRound[confidenceByRound.length - 1];
+
+    const confTrend = lastRound ? lastRound.avg - firstRound.avg : 0;
+    const consTrend = lastRound ? lastRound.consensus - firstRound.consensus : 0;
+
+    // Generate confidence progression string
+    const confProgression = confidenceByRound.map(r => `${r.avg.toFixed(0)}%`).join(' → ');
+    const consProgression = confidenceByRound.map(r => `${r.consensus.toFixed(0)}%`).join(' → ');
+
+    let html = `
+        <hr>
+
+        <h2>OBSERVATIONER & LÄRDOMAR</h2>
+
+        <div class="stats">
+            <h3>Det Paradoxala Mönstret</h3>
+            <p><code>Konfidens:  ${confProgression}  ${confTrend > 0 ? '↑'.repeat(Math.min(3, Math.ceil(confTrend / 10))) : confTrend < 0 ? '↓'.repeat(Math.min(3, Math.ceil(-confTrend / 10))) : '→'}</code></p>
+            <p><code>Konsensus:  ${consProgression}  ${consTrend > 0 ? '↑'.repeat(Math.min(3, Math.ceil(consTrend / 10))) : consTrend < 0 ? '↓'.repeat(Math.min(3, Math.ceil(-consTrend / 10))) : '↕↕↕'}</code></p>
+
+            <p><strong>Observation:</strong> ${this.generateConfidenceConsensusObservation(confTrend, consTrend)}</p>
+        </div>
+
+        <hr>
+
+        <h2>SLUTSATS: VAD LÄRDE VI OSS?</h2>
+
+        <h3>Om Frågan:</h3>
+        <p>${this.generateQuestionInsight(session)}</p>
+
+        <h3>Om AI-panelen:</h3>
+        <p><strong>Vi är bra på att:</strong></p>
+        <ul>
+            <li>Identifiera olika perspektiv och nyanser</li>
+            <li>Presentera välformulerade argument</li>
+            <li>Upprätthålla respektfull diskussion</li>
+            ${session.status === 'consensus' ? '<li>Nå sann konsensus genom konstruktiv debatt</li>' : '<li>Hålla fast vid våra övertygelser (kanske för hårt?)</li>'}
+        </ul>
+
+        <p><strong>Vi kunde göra bättre:</strong></p>
+        <ul>
+            <li>Faktiskt kompromissa när vi är oeniga</li>
+            <li>Erkänna när frågan är subjektiv eller komplex</li>
+            ${session.status !== 'consensus' ? '<li>Acceptera att "flera giltiga perspektiv" är OK</li>' : '<li>Nå konsensus snabbare utan att kompromissa kvalitet</li>'}
+        </ul>
+
+        <h3>Om Konsensusmätning:</h3>
+        <p>${this.generateConsensusMeasurementInsight(session)}</p>
+
+        <div class="conclusion">
+            <h3>Den Ironiska Slutsatsen:</h3>
+            <p>${this.generateIronicConclusion(session)}</p>
+        </div>`;
+
+    return html;
+  }
+
+  private generateConfidenceConsensusObservation(confTrend: number, consTrend: number): string {
+    if (confTrend > 10 && consTrend < -10) {
+      return 'Ju mer självsäkra AI:erna blev, desto mindre kunde de enas. Ett klassiskt mönster av ökande polarisering.';
+    } else if (confTrend > 5 && consTrend > 5) {
+      return 'Både självsäkerhet och konsensus ökade - ett positivt tecken på konstruktiv debatt där AI:erna lärde av varandra.';
+    } else if (Math.abs(confTrend) < 5 && Math.abs(consTrend) < 5) {
+      return 'Både konfidens och konsensus förblev stabila genom debatten - AI:erna höll fast vid sina ursprungliga positioner.';
+    } else if (consTrend < -10) {
+      return 'Konsensus minskade genom debatten. Djupare analys exponerade fundamental oenighet snarare än att lösa den.';
+    } else {
+      return 'Debattens dynamik visade ett komplext samspel mellan självsäkerhet och enighet.';
+    }
+  }
+
+  private generateQuestionInsight(session: DebateSession): string {
+    const complexity = session.rounds.length;
+    const finalConsensus = session.rounds[session.rounds.length - 1]?.consensus_score || 0;
+
+    if (session.status === 'consensus') {
+      return `Efter ${complexity} ${complexity === 1 ? 'runda' : 'rundor'} nådde AI:erna äkta konsensus (${(finalConsensus * 100).toFixed(1)}%). Frågan hade tillräckligt tydliga parametrar för att möjliggöra enighet genom systematisk analys.`;
+    } else if (finalConsensus > 0.6) {
+      return `Trots ${complexity} ${complexity === 1 ? 'runda' : 'rundor'} av debatt nåddes ingen formell konsensus, men AI:erna visade betydande överensstämmelse (${(finalConsensus * 100).toFixed(1)}%). Frågan innehåller sannolikt både objektiva och subjektiva element.`;
+    } else {
+      return `${complexity} ${complexity === 1 ? 'runda' : 'rundor'} av intensiv debatt resulterade i fortsatt oenighet (${(finalConsensus * 100).toFixed(1)}% konsensus). Detta antyder att frågan är genuint komplex med flera giltiga perspektiv, eller att AI:erna värderar olika aspekter olika.`;
+    }
+  }
+
+  private generateConsensusMeasurementInsight(session: DebateSession): string {
+    const progression = session.rounds.map(r => (r.consensus_score * 100).toFixed(0) + '%').join(' → ');
+
+    if (session.status === 'consensus') {
+      return `Konsensusmätningen fungerade som avsett - den spårade gradvis konvergens från ${progression} tills äkta enighet uppnåddes. Systemet visade att genuint överensstämmande kan uppnås genom strukturerad debatt.`;
+    } else {
+      return `Konsensusprogressionen (${progression}) visar hur svårt det är att mäta "enighet" när AI:er uttrycker samma koncept med olika ord eller fokuserar på olika aspekter av samma sanning. Semantisk likhet ≠ identisk åsikt.`;
+    }
+  }
+
+  private generateIronicConclusion(session: DebateSession): string {
+    if (session.status === 'consensus') {
+      return `Tre AI-modeller med olika träningsdata, arkitekturer och bias lyckades faktiskt enas. Det är både imponerande och förvånande - kanske finns det hopp för mänsklig konsensus också?`;
+    } else if (session.status === 'user_accepted' || session.status === 'manually_resolved') {
+      return `Tre AI-modeller kunde inte enas, så en människa fick göra det de inte kunde - fatta ett beslut trots osäkerhet. Kanske är det människans superkraft: att välja trots brist på perfekt information.`;
+    } else {
+      return `Tre intelligenta AI-system med tillgång till samma information och samma mål (att svara på frågan) kunde inte enas. Det är en perfekt metafor för mänsklig diskurs - att ha fakta är inte detsamma som att ha konsensus.`;
+    }
+  }
+
+  private generateWorthItStatement(session: DebateSession): string {
+    const cost = session.current_cost_usd;
+    if (session.status === 'consensus') {
+      return 'Absolut - äkta konsensus uppnådd!';
+    } else if (cost < 0.10) {
+      return 'Ja - billigt att utforska olika perspektiv';
+    } else if (cost < 0.50) {
+      return 'Definitivt - lärorikt även utan konsensus';
+    } else {
+      return 'Kanske - beror på hur mycket du värderar mångsidiga perspektiv';
+    }
+  }
+
+  private generateDebateQuote(session: DebateSession): string {
+    const quotes = [
+      {
+        text: 'I själva verket är det inte viktigt att vi alla tycker lika. Det viktiga är att vi kan tänka tillsammans.',
+        author: 'Fritt efter Peter Senge'
+      },
+      {
+        text: 'Sanningen är sällan ren och aldrig enkel.',
+        author: 'Oscar Wilde'
+      },
+      {
+        text: 'Det är skillnaden i åsikt som gör hästkapplöpningar.',
+        author: 'Mark Twain'
+      },
+      {
+        text: 'Kloka människor talar eftersom de har något att säga; dårar eftersom de måste säga något.',
+        author: 'Platon'
+      }
+    ];
+
+    // Select quote based on session outcome
+    let selectedQuote;
+    if (session.status === 'consensus') {
+      selectedQuote = quotes[0]; // Thinking together
+    } else if (session.rounds.length >= 3) {
+      selectedQuote = quotes[1]; // Truth is complex
+    } else {
+      selectedQuote = quotes[2]; // Difference of opinion
+    }
+
+    return `
+            <blockquote style="margin-top: 30px; font-size: 1.05em; font-style: italic; border-left: 3px solid #ddd; padding-left: 20px; color: #555;">
+                "${selectedQuote.text}"<br>
+                <span style="font-size: 0.9em;">— ${selectedQuote.author}</span>
+            </blockquote>`;
+  }
+
+  private getStatusText(status: string): string {
+    const statusMap: {[key: string]: string} = {
+      'active': '🔄 Pågående',
+      'consensus': '✅ Konsensus uppnådd (≥85%)',
+      'user_accepted': '👤 Användaren accepterade ett svar',
+      'manually_resolved': '🤝 Användaren syntetiserade positionerna',
+      'deadlock': '🚨 Oenighet',
+      'paused': '⏸️ Pausad',
+      'failed': '❌ Misslyckades'
+    };
+    return statusMap[status] || status;
   }
 
   private truncateText(text: string, maxLength: number): string {

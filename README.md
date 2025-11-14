@@ -95,7 +95,7 @@ Use `analyze_disagreement` with the session_id to understand why AIs disagree:
 
 ### Automatic Detailed Debate Reports
 
-**Every debate automatically generates a comprehensive markdown report** saved to `.sessions/debate-report-{session_id}.md`. No need to request it separately!
+**Every debate automatically generates a beautifully styled HTML report** saved to `.sessions/debate-report-{session_id}.html`. No need to request it separately!
 
 **Each report includes:**
 - 📊 Complete AI responses from every round
@@ -105,10 +105,12 @@ Use `analyze_disagreement` with the session_id to understand why AIs disagree:
 - 📉 Final analysis explaining why consensus increased/decreased
 - ⏱️ Duration and session metadata
 - 🟢🟡🔴 Color-coded consensus strength indicators
+- 🎨 Beautiful Apple-inspired typography and styling
+- 🌈 Color-coded AI sections (GPT green, Claude orange, Gemini blue)
 
 **The report file updates automatically** as the debate progresses in interactive mode.
 
-**You'll receive the file path** after each debate completion - just open it in your markdown editor or text viewer!
+**You'll receive the file path** after each debate completion - just open it in your web browser for a beautiful, styled report!
 
 **Manual export (optional):** Use `get_debate_log` with session_id if you need to retrieve a report later
 
@@ -129,7 +131,7 @@ Gemini: Very unlikely, needs more research (80% confidence)
 Cost: $0.73/$2.00
 
 📋 Detaljerad rapport sparad:
-`C:\phone-friend-mcp-v2\.sessions\debate-report-session_12345.md`
+`C:\phone-friend-mcp-v2\.sessions\debate-report-session_12345.html`
 
 *Öppna filen för fullständig runda-för-runda analys.*
 

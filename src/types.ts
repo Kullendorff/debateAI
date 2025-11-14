@@ -51,7 +51,7 @@ export interface PhoneAFriendParams {
 }
 
 export interface PhoneAFriendResult {
-  status: 'consensus' | 'deadlock' | 'intervention_needed';
+  status: 'consensus' | 'deadlock' | 'intervention_needed' | 'user_accepted' | 'manually_resolved';
   final_answer?: string;
   debate_log: DebateRound[];
   cost_summary: CostBreakdown;
@@ -85,7 +85,7 @@ export interface DebateSession {
   question: string;
   context?: string;
   rounds: DebateRound[];
-  status: 'active' | 'consensus' | 'deadlock' | 'paused' | 'failed';
+  status: 'active' | 'consensus' | 'deadlock' | 'paused' | 'failed' | 'user_accepted' | 'manually_resolved';
   created_at: Date;
   updated_at: Date;
   max_rounds: number;
