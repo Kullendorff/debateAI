@@ -89,9 +89,31 @@ If no consensus is reached, you'll get an intervention summary with options:
 Use `analyze_disagreement` with the session_id to understand why AIs disagree:
 
 - Core conflict identification
-- Disagreement type (factual/interpretive/philosophical)  
+- Disagreement type (factual/interpretive/philosophical)
 - Resolvability score
 - Specific differences between positions
+
+### Detailed Debate Report
+
+Use `get_debate_log` to generate a comprehensive round-by-round analysis:
+
+```
+get_debate_log with session_id and format (markdown or plain_text)
+```
+
+**Report includes:**
+- 📊 Round-by-round breakdown with all AI responses
+- 📈 Consensus evolution tracking (increases/decreases over time)
+- 💭 Confidence level changes for each AI per round
+- 🎯 Detailed cost breakdown (per AI, per round)
+- 📉 Final analysis explaining why consensus changed
+- ⏱️ Duration and session metadata
+
+**Perfect for:**
+- Exporting debates for documentation
+- Understanding how AI positions evolved
+- Analyzing cost efficiency per round
+- Sharing debate results with others
 
 ## Example Workflow
 
@@ -123,31 +145,38 @@ Claude: [Calls continue_debate with continue_2_rounds...]
 ## Cost Management
 
 - Default budget: $2.00 per session
-- Warning at 75% of budget  
+- Warning at 75% of budget
 - Hard stop at 100%
 - Real-time cost tracking by model and round
 - Token usage monitoring
 
-Default models and pricing (per 1K tokens):
-- GPT-4o: $0.005 input, $0.015 output
-- Gemini 2.5 Pro: $3.50 input, $10.50 output  
-- Claude Sonnet 4: $0.003 input, $0.015 output
+**Default models (optimized for cost):**
+- **gpt-4o-mini**: $0.00015 input, $0.00060 output per 1K tokens
+- **gemini-2.0-flash-exp**: $0.0001 input, $0.0005 output per 1M tokens (~free)
+- **claude-3-5-sonnet-20241022**: $0.003 input, $0.015 output per 1K tokens
+
+**Typical cost per debate:** $0.01-0.20 (1-20 öre) for 3 rounds
 
 ### Upgrading to Premium Models
 
-To use the most advanced (but expensive) models, edit `src/ai-clients.ts`:
+The system uses cost-effective models by default. For maximum capability (at higher cost), edit `src/ai-clients.ts`:
 
-**OpenAI GPT-5:**
+**OpenAI (15x more expensive):**
 ```typescript
-private defaultModel = 'gpt-5';  // $1.25 input, $10.00 output per 1K tokens
+private defaultModel = 'gpt-4o';  // $0.0025 input, $0.010 output per 1K tokens
 ```
 
-**Claude Opus 4:**
-```typescript  
-private defaultModel = 'claude-opus-4-1-20250805';  // $15.00 input, $75.00 output per 1K tokens
+**Gemini (35,000x more expensive!):**
+```typescript
+private defaultModel = 'gemini-2.5-pro';  // $3.50 input, $10.50 output per 1M tokens
 ```
 
-⚠️ **Warning**: These premium models cost 250x-5000x more than the defaults!
+**Claude (5x more expensive):**
+```typescript
+private defaultModel = 'claude-sonnet-4-20250514';  // $0.015 input, $0.075 output per 1K tokens
+```
+
+⚠️ **Warning**: Premium models dramatically increase costs. Gemini 2.5 Pro especially is 35,000x more expensive than the default!
 
 ## Architecture
 

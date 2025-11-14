@@ -859,69 +859,192 @@ Please provide your response, addressing the other AIs' points where relevant. I
 
   private formatDebateLogMarkdown(session: DebateSession): string {
     const costBreakdown = this.costController.getCostBreakdown(session.id);
-    
-    let log = `# 🤖 AI Konsensus-panel Debatt\n\n`;
+    const startTime = session.created_at.toLocaleString('sv-SE');
+    const interactiveMode = session.status === 'paused' ? 'Interactive Mode' : 'Auto Mode';
+
+    let log = `# 🇪🇺 ${session.question.substring(0, 60)}${session.question.length > 60 ? '...' : ''} - AI-paneldebatt\n\n`;
     log += `**Fråga:** ${session.question}\n\n`;
     if (session.context) {
       log += `**Kontext:** ${session.context}\n\n`;
     }
-    log += `**Session ID:** \`${session.id}\`\n`;
-    log += `**Skapad:** ${session.created_at.toLocaleString('sv-SE')}\n`;
-    log += `**Status:** ${session.status}\n`;
-    log += `**Strategi:** ${session.strategy}\n\n`;
+    log += `**Startad:** ${startTime}\n`;
+    log += `**Status:** ${this.getStatusEmoji(session.status)} ${session.status.charAt(0).toUpperCase() + session.status.slice(1)} (${interactiveMode})\n`;
+    log += `**Konsensus efter Runda ${session.rounds.length}:** ${session.rounds.length > 0 ? (session.rounds[session.rounds.length-1]!.consensus_score * 100).toFixed(1) + '%' : 'N/A'}\n\n`;
+    log += `---\n\n`;
 
-    log += `## 📊 Sammanfattning\n\n`;
-    log += `- **Antal rundar:** ${session.rounds.length}/${session.max_rounds}\n`;
-    log += `- **Total kostnad:** $${costBreakdown?.total_cost_usd.toFixed(4) || '0.0000'}\n`;
-    log += `- **Totala tokens:** ${costBreakdown?.tokens_used.toLocaleString() || '0'}\n`;
-    log += `- **Final konsensus:** ${session.rounds.length > 0 ? (session.rounds[session.rounds.length-1]!.consensus_score * 100).toFixed(1) + '%' : 'N/A'}\n\n`;
-
+    // Round-by-round analysis
     session.rounds.forEach((round, index) => {
-      log += `## 🔄 Runda ${round.round_number}\n\n`;
-      log += `**Tidsstämpel:** ${round.timestamp.toLocaleString('sv-SE')}\n`;
-      log += `**Konsensus-poäng:** ${(round.consensus_score * 100).toFixed(1)}%\n`;
-      log += `**Kostnad:** $${round.cost_usd.toFixed(4)}\n`;
-      log += `**Tokens:** ${round.tokens_used.toLocaleString()}\n\n`;
+      const roundTitle = index === 0 ? 'RUNDA 1 - Grundläggande positioner' :
+                        index === session.rounds.length - 1 ? `RUNDA ${round.round_number} - Slutgiltig konsensus (FINAL)` :
+                        `RUNDA ${round.round_number} - Fördjupad analys och kritik`;
 
-      log += `### 🤖 GPT-4o (OpenAI)\n`;
-      log += `**Säkerhet:** ${round.responses.openai.confidence}%\n`;
-      log += `**Modell:** ${round.responses.openai.model}\n`;
-      log += `**Kostnad:** $${round.responses.openai.cost_usd.toFixed(4)}\n\n`;
-      log += `**Svar:**\n${round.responses.openai.content}\n\n---\n\n`;
+      log += `## 🔄 ${roundTitle}\n\n`;
+      log += `**Kostnad:** $${round.cost_usd.toFixed(4)} | **Tokens:** ${round.tokens_used.toLocaleString()}\n\n`;
 
-      log += `### 🧠 Claude Sonnet 4 (Anthropic)\n`;
-      log += `**Säkerhet:** ${round.responses.claude.confidence}%\n`;
-      log += `**Modell:** ${round.responses.claude.model}\n`;
-      log += `**Kostnad:** $${round.responses.claude.cost_usd.toFixed(4)}\n\n`;
-      log += `**Svar:**\n${round.responses.claude.content}\n\n---\n\n`;
+      // OpenAI response
+      const openaiConfChange = index > 0 ? this.getConfidenceChange(session.rounds[index-1]!.responses.openai.confidence, round.responses.openai.confidence) : '';
+      log += `### 🤖 ${this.getModelDisplayName(round.responses.openai.model)} (${round.responses.openai.confidence}% konfidens) ${openaiConfChange}\n\n`;
+      log += `${round.responses.openai.content}\n\n`;
+      log += `---\n\n`;
 
-      log += `### 🌟 Gemini (Google)\n`;
-      log += `**Säkerhet:** ${round.responses.gemini.confidence}%\n`;
-      log += `**Modell:** ${round.responses.gemini.model}\n`;
-      log += `**Kostnad:** $${round.responses.gemini.cost_usd.toFixed(4)}\n\n`;
-      log += `**Svar:**\n${round.responses.gemini.content}\n\n`;
+      // Claude response
+      const claudeConfChange = index > 0 ? this.getConfidenceChange(session.rounds[index-1]!.responses.claude.confidence, round.responses.claude.confidence) : '';
+      log += `### 🧠 ${this.getModelDisplayName(round.responses.claude.model)} (${round.responses.claude.confidence}% konfidens) ${claudeConfChange}\n\n`;
+      log += `${round.responses.claude.content}\n\n`;
+      log += `---\n\n`;
 
+      // Gemini response
+      const geminiConfChange = index > 0 ? this.getConfidenceChange(session.rounds[index-1]!.responses.gemini.confidence, round.responses.gemini.confidence) : '';
+      log += `### 🌟 ${this.getModelDisplayName(round.responses.gemini.model)} (${round.responses.gemini.confidence}% konfidens) ${geminiConfChange}\n\n`;
+      log += `${round.responses.gemini.content}\n\n`;
+
+      // Comparison section after each round
       if (index < session.rounds.length - 1) {
         log += `---\n\n`;
       }
+
+      log += `## 📊 Jämförelse efter Runda ${round.round_number}\n\n`;
+      log += `**Konsensus:** ${(round.consensus_score * 100).toFixed(1)}%`;
+
+      if (index > 0) {
+        const prevConsensus = session.rounds[index-1]!.consensus_score * 100;
+        const currentConsensus = round.consensus_score * 100;
+        const change = currentConsensus - prevConsensus;
+        const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '→';
+        log += ` (${arrow} ${change > 0 ? '+' : ''}${change.toFixed(1)}%)`;
+      }
+      log += `\n\n`;
+
+      // Consensus analysis
+      if (round.consensus_score > 0.7) {
+        log += `**Analys:** 🟢 Stark konsensus - AI:erna är i stort sett överens\n\n`;
+      } else if (round.consensus_score > 0.5) {
+        log += `**Analys:** 🟡 Moderat konsensus - Vissa likheter men viktiga skillnader kvarstår\n\n`;
+      } else {
+        log += `**Analys:** 🔴 Svag konsensus - Betydande oenighet mellan AI:erna\n\n`;
+      }
+
+      // Confidence levels
+      const avgConfidence = (round.responses.openai.confidence + round.responses.claude.confidence + round.responses.gemini.confidence) / 3;
+      log += `**Genomsnittlig konfidens:** ${avgConfidence.toFixed(1)}%\n`;
+      log += `- GPT: ${round.responses.openai.confidence}%\n`;
+      log += `- Claude: ${round.responses.claude.confidence}%\n`;
+      log += `- Gemini: ${round.responses.gemini.confidence}%\n\n`;
+
+      log += `**Kostnad hittills:** $${this.sumCostsUpToRound(session.rounds, index).toFixed(4)}\n\n`;
+      log += `---\n\n`;
     });
 
+    // Final analysis section
+    if (session.rounds.length > 1) {
+      log += `## 📊 SLUTANALYS\n\n`;
+
+      const firstConsensus = session.rounds[0]!.consensus_score * 100;
+      const lastConsensus = session.rounds[session.rounds.length - 1]!.consensus_score * 100;
+      const consensusChange = lastConsensus - firstConsensus;
+
+      log += `**Konsensusutveckling:**\n`;
+      session.rounds.forEach((round, i) => {
+        const arrow = i === 0 ? '🏁' : consensusChange > 0 ? '📈' : consensusChange < 0 ? '📉' : '➡️';
+        log += `- Runda ${i+1}: ${arrow} ${(round.consensus_score * 100).toFixed(1)}%\n`;
+      });
+      log += `\n`;
+
+      if (consensusChange > 5) {
+        log += `**Resultat:** AI:erna konvergerade mot större enighet (+${consensusChange.toFixed(1)}%)\n\n`;
+      } else if (consensusChange < -5) {
+        log += `**Resultat:** AI:erna divergerade och blev mer oeniga (${consensusChange.toFixed(1)}%)\n\n`;
+      } else {
+        log += `**Resultat:** Konsensus förblev relativt stabil (${consensusChange > 0 ? '+' : ''}${consensusChange.toFixed(1)}%)\n\n`;
+      }
+
+      // Confidence evolution
+      log += `**Konfidensutveckling:**\n`;
+      log += `\`\`\`\n`;
+      session.rounds.forEach(round => {
+        log += `Runda ${round.round_number}: GPT ${round.responses.openai.confidence}% | Claude ${round.responses.claude.confidence}% | Gemini ${round.responses.gemini.confidence}%\n`;
+      });
+      log += `\`\`\`\n\n`;
+    }
+
+    // Cost breakdown
     if (costBreakdown) {
-      log += `\n## 💰 Detaljerad kostnadsammanställning\n\n`;
-      log += `**Total kostnad:** $${costBreakdown.total_cost_usd.toFixed(4)}\n\n`;
-      log += `**Per AI:**\n`;
-      log += `- OpenAI: $${costBreakdown.by_model.openai.toFixed(4)}\n`;
-      log += `- Claude: $${costBreakdown.by_model.claude.toFixed(4)}\n`;
-      log += `- Gemini: $${costBreakdown.by_model.gemini.toFixed(4)}\n\n`;
+      log += `## 💰 FINAL KOSTNAD\n\n`;
+      log += `**Total kostnad:** $${costBreakdown.total_cost_usd.toFixed(4)} (~${(costBreakdown.total_cost_usd * 10).toFixed(0)} öre)\n`;
+      log += `**Total tokens:** ${costBreakdown.tokens_used.toLocaleString()}\n\n`;
+      log += `**Per AI (hela debatten):**\n`;
+      const totalCost = costBreakdown.total_cost_usd;
+      const lastRound = session.rounds[session.rounds.length - 1];
+      if (lastRound) {
+        log += `- OpenAI (${lastRound.responses.openai.model}): $${costBreakdown.by_model.openai.toFixed(4)} (${((costBreakdown.by_model.openai/totalCost)*100).toFixed(0)}%)\n`;
+        log += `- Claude (${lastRound.responses.claude.model}): $${costBreakdown.by_model.claude.toFixed(4)} (${((costBreakdown.by_model.claude/totalCost)*100).toFixed(0)}%)\n`;
+        log += `- Gemini (${lastRound.responses.gemini.model}): $${costBreakdown.by_model.gemini.toFixed(4)} (${((costBreakdown.by_model.gemini/totalCost)*100).toFixed(0)}%)\n\n`;
+      }
+
       log += `**Per runda:**\n`;
       costBreakdown.by_round.forEach((cost, i) => {
-        log += `- Runda ${i+1}: $${cost.toFixed(4)}\n`;
+        const round = session.rounds[i];
+        log += `- Runda ${i+1}: $${cost.toFixed(4)}`;
+        if (round) {
+          const roundConsensus = (round.consensus_score * 100).toFixed(1);
+          log += ` (konsensus: ${roundConsensus}%)`;
+        }
+        log += `\n`;
       });
     }
 
-    log += `\n---\n\n*Genererat av Phone-a-Friend MCP v2 - AI Konsensus Panel*`;
-    
+    log += `\n---\n\n`;
+    log += `## ✅ DEBATT ${session.status === 'consensus' ? 'SLUTFÖRD MED KONSENSUS' : 'AVSLUTAD'}\n\n`;
+    log += `**Session ID:** \`${session.id}\`\n`;
+    log += `**Varaktighet:** ${this.calculateDuration(session)}\n`;
+    log += `**Antal rundor:** ${session.rounds.length}/${session.max_rounds}\n`;
+    log += `**Läge:** ${interactiveMode}\n`;
+
     return log;
+  }
+
+  private getStatusEmoji(status: string): string {
+    const emojis: {[key: string]: string} = {
+      'active': '🔄',
+      'consensus': '✅',
+      'deadlock': '🚨',
+      'paused': '⏸️',
+      'failed': '❌'
+    };
+    return emojis[status] || '❓';
+  }
+
+  private getModelDisplayName(model: string): string {
+    if (model.includes('gpt')) return 'GPT-4o';
+    if (model.includes('claude')) return 'Claude Sonnet 4';
+    if (model.includes('gemini')) return 'Gemini';
+    return model;
+  }
+
+  private getConfidenceChange(prev: number, current: number): string {
+    if (prev === current) return '';
+    const diff = current - prev;
+    if (diff > 0) return `↑${diff > 5 ? '↑' : ''}`;
+    if (diff < 0) return `↓${diff < -5 ? '↓' : ''}`;
+    return '';
+  }
+
+  private sumCostsUpToRound(rounds: DebateRound[], upToIndex: number): number {
+    return rounds.slice(0, upToIndex + 1).reduce((sum, r) => sum + r.cost_usd, 0);
+  }
+
+  private calculateDuration(session: DebateSession): string {
+    const start = session.created_at.getTime();
+    const end = session.updated_at.getTime();
+    const durationMs = end - start;
+    const minutes = Math.floor(durationMs / 60000);
+    const seconds = Math.floor((durationMs % 60000) / 1000);
+
+    if (minutes > 0) {
+      return `~${minutes} minut${minutes > 1 ? 'er' : ''}`;
+    } else {
+      return `~${seconds} sekunder`;
+    }
   }
 
   private formatDebateLogPlainText(session: DebateSession): string {
