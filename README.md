@@ -4,7 +4,9 @@ An MCP (Model Context Protocol) server that creates an AI consensus panel with O
 
 ## Quick Start
 
-### 1. Get API Keys
+### Option 1: Using npx (Recommended)
+
+#### 1. Get API Keys
 
 You'll need API keys from at least 2 of these providers:
 
@@ -12,24 +14,7 @@ You'll need API keys from at least 2 of these providers:
 - **Google Gemini**: https://aistudio.google.com/app/apikey  
 - **Anthropic**: https://console.anthropic.com/
 
-### 2. Configure Environment
-
-```bash
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your API keys
-# You need at least 2 API keys for the system to work
-```
-
-### 3. Build the Server
-
-```bash
-npm install
-npm run build
-```
-
-### 4. Configure Claude Desktop
+#### 2. Configure Claude Desktop
 
 Add this to your `claude_desktop_config.json`:
 
@@ -37,8 +22,8 @@ Add this to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "phone-a-friend": {
-      "command": "node",
-      "args": ["C:\\phone-friend-mcp-v2\\build\\index.js"],
+      "command": "npx",
+      "args": ["phone-friend-mcp-v2"],
       "env": {
         "OPENAI_API_KEY": "sk-...",
         "GEMINI_API_KEY": "AI...",
@@ -49,9 +34,54 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-**⚠️ Important**: Replace `C:\\phone-friend-mcp-v2` with the actual path to this project.
+**⚠️ Important**: Replace the example API keys with your real ones. You need at least 2 API keys for the system to work.
 
-### 5. Restart Claude Desktop
+### Option 2: Manual Installation
+
+#### 1. Get API Keys
+
+Same as Option 1 above.
+
+#### 2. Configure Environment
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your API keys
+# You need at least 2 API keys for the system to work
+```
+
+#### 3. Build the Server
+
+```bash
+npm install
+npm run build
+```
+
+#### 4. Configure Claude Desktop
+
+Add this to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "phone-a-friend": {
+      "command": "node",
+      "args": ["C:\\\\phone-friend-mcp-v2\\\\build\\\\index.js"],
+      "env": {
+        "OPENAI_API_KEY": "sk-...",
+        "GEMINI_API_KEY": "AI...",
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    }
+  }
+}
+```
+
+**⚠️ Important**: Replace `C:\\\\phone-friend-mcp-v2` with the actual path to this project.
+
+#### 5. Restart Claude Desktop
 
 The server will appear in Claude's MCP tools menu.
 
@@ -237,7 +267,20 @@ npm run clean && npm run build
 
 # Test specific components
 node build/index.js
+
+# Test locally as if installed via npx
+npm run build && node build/index.js
 ```
+
+## Publishing
+
+To publish the package for npx usage:
+
+1. Ensure you're logged into npm: `npm login`
+2. Update version if needed: `npm version patch`
+3. Publish: `npm publish`
+
+The package is configured to automatically build before publishing via the `prepublishOnly` script.
 
 ## License
 

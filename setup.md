@@ -1,6 +1,51 @@
 # Phone-a-Friend MCP v2 Setup Guide
 
-## Step-by-Step Configuration
+## Option 1: Easy Setup with npx (Recommended)
+
+### 1. Get API Keys
+
+You'll need API keys from at least 2 of these providers:
+
+- **OpenAI**: https://platform.openai.com/api-keys
+- **Google Gemini**: https://aistudio.google.com/app/apikey  
+- **Anthropic**: https://console.anthropic.com/
+
+### 2. Configure Claude Desktop
+
+Find your Claude Desktop config file:
+
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+**Mac**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add the MCP server configuration using npx:
+
+```json
+{
+  "mcpServers": {
+    "phone-a-friend": {
+      "command": "npx",
+      "args": ["phone-friend-mcp-v2"],
+      "env": {
+        "OPENAI_API_KEY": "sk-your-actual-key",
+        "GEMINI_API_KEY": "your-actual-gemini-key",
+        "ANTHROPIC_API_KEY": "sk-ant-your-actual-key"
+      }
+    }
+  }
+}
+```
+
+**Important Notes:**
+- Replace the example API keys with your real ones
+- You can omit API keys you don't have, but need at least 2
+- The first time you use it, npx will automatically download and cache the package
+
+### 3. Restart Claude Desktop
+
+Completely quit and restart Claude Desktop for the MCP server to load.
+
+## Option 2: Manual Setup
 
 ### 1. API Keys Setup
 
@@ -42,7 +87,7 @@ Add the MCP server configuration:
   "mcpServers": {
     "phone-a-friend": {
       "command": "node",
-      "args": ["C:\\phone-friend-mcp-v2\\build\\index.js"],
+      "args": ["C:\\\\phone-friend-mcp-v2\\\\build\\\\index.js"],
       "env": {
         "OPENAI_API_KEY": "sk-your-actual-key",
         "GEMINI_API_KEY": "your-actual-gemini-key",
@@ -54,7 +99,7 @@ Add the MCP server configuration:
 ```
 
 **Important Notes:**
-- Replace `C:\\phone-friend-mcp-v2` with your actual project path
+- Replace `C:\\\\phone-friend-mcp-v2` with your actual project path
 - Use forward slashes `/` on Mac/Linux: `/path/to/phone-friend-mcp-v2/build/index.js`
 - Replace the example API keys with your real ones
 - You can omit API keys you don't have, but need at least 2
