@@ -1,0 +1,111 @@
+.ai-response-card {
+  border: 2px solid;
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ai-response-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.ai-icon {
+  font-size: 1.5rem;
+}
+
+.ai-title {
+  color: var(--color-text);
+}
+
+.confidence-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+.confidence-change {
+  font-size: 0.875rem;
+  margin-left: 0.25rem;
+}
+
+.confidence-change.up {
+  color: var(--color-success);
+}
+
+.confidence-change.down {
+  color: var(--color-danger);
+}
+
+.card-content {
+  flex: 1;
+  margin-bottom: 1rem;
+}
+
+.response-text {
+  color: var(--color-text);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.model-name {
+  font-family: var(--font-mono);
+  background: var(--color-surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.token-count, .cost {
+  font-weight: 500;
+}
+
+/* AI-specific styling */
+.ai-gpt .ai-title {
+  color: var(--color-gpt);
+}
+
+.ai-claude .ai-title {
+  color: var(--color-claude);
+}
+
+.ai-gemini .ai-title {
+  color: var(--color-gemini);
+}

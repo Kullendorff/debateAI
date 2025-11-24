@@ -2,6 +2,16 @@
 
 An MCP (Model Context Protocol) server that creates an AI consensus panel with OpenAI, Google Gemini, and Anthropic Claude to debate complex questions and reach consensus.
 
+## 🆕 NEW: Web UI Visualizer! 🎨
+
+Visualisera dina AI-debatter i en modern React-app med:
+- 📊 Interaktiva konsensus-grafer
+- 🤖 Färgkodade AI-responser
+- 📈 Real-time trend-analys
+- 💰 Detaljerad kostnadsspårning
+
+**[→ Se Web UI Setup Guide](WEB_UI_SETUP.md)**
+
 ## Quick Start
 
 ### 1. Get API Keys
