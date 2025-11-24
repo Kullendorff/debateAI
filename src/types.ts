@@ -92,4 +92,57 @@ export interface DebateSession {
   max_cost_usd: number;
   current_cost_usd: number;
   strategy: 'debate' | 'synthesize' | 'tournament';
+  // Nya fält för avancerade funktioner
+  peer_reviews?: PeerReviewSummary[];
+  consensus_breakdown?: ConsensusBreakdownSummary;
+  chairman_synthesis?: ChairmanSynthesisSummary;
+}
+
+// === NYA TYPER FÖR AVANCERADE FUNKTIONER ===
+
+/**
+ * Sammanfattning av peer review för lagring i session
+ */
+export interface PeerReviewSummary {
+  round_number: number;
+  winner: 'openai' | 'gemini' | 'claude';
+  consensus_on_winner: boolean;
+  rankings: {
+    provider: 'openai' | 'gemini' | 'claude';
+    avg_position: number;
+    votes_for_first: number;
+  }[];
+  cost_usd: number;
+  timestamp: Date;
+}
+
+/**
+ * Sammanfattning av konsensusanalys för lagring
+ */
+export interface ConsensusBreakdownSummary {
+  round_number: number;
+  overall_score: number;
+  components: {
+    semantic_similarity: number;
+    factual_agreement: number;
+    tonal_alignment: number;
+    structural_similarity: number;
+    confidence_alignment: number;
+  };
+  agreement_points: string[];
+  disagreement_points: string[];
+  timestamp: Date;
+}
+
+/**
+ * Sammanfattning av ordförandesyntes för lagring
+ */
+export interface ChairmanSynthesisSummary {
+  chairman: 'openai' | 'gemini' | 'claude';
+  synthesized_answer: string;
+  confidence: number;
+  key_agreements: string[];
+  key_disagreements: string[];
+  cost_usd: number;
+  timestamp: Date;
 }
