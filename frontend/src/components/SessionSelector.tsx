@@ -5,17 +5,20 @@ import './SessionSelector.css'
 interface Props {
   sessions: SessionSummary[]
   onSelectSession: (id: string) => void
+  onCompare?: (ids: string[]) => void
 }
 
 type SortOption = 'newest' | 'oldest' | 'highest_consensus' | 'lowest_consensus' | 'most_rounds' | 'highest_cost'
 type StatusFilter = 'all' | 'consensus' | 'deadlock' | 'paused' | 'active'
 type ConsensusFilter = 'all' | 'high' | 'medium' | 'low'
 
-export default function SessionSelector({ sessions, onSelectSession }: Props) {
+export default function SessionSelector({ sessions, onSelectSession, onCompare }: Props) {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [consensusFilter, setConsensusFilter] = useState<ConsensusFilter>('all')
   const [sortBy, setSortBy] = useState<SortOption>('newest')
+  const [compareMode, setCompareMode] = useState(false)
+  const [selectedForCompare, setSelectedForCompare] = useState<Set<string>>(new Set())
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -96,6 +99,35 @@ export default function SessionSelector({ sessions, onSelectSession }: Props) {
     setSortBy('newest')
   }
 
+  const toggleCompareMode = () => {
+    setCompareMode(!compareMode)
+    setSelectedForCompare(new Set())
+  }
+
+  const toggleSessionForCompare = (id: string) => {
+    const newSelected = new Set(selectedForCompare)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else if (newSelected.size < 4) {
+      newSelected.add(id)
+    }
+    setSelectedForCompare(newSelected)
+  }
+
+  const handleCompare = () => {
+    if (selectedForCompare.size >= 2 && onCompare) {
+      onCompare([...selectedForCompare])
+    }
+  }
+
+  const handleCardClick = (id: string) => {
+    if (compareMode) {
+      toggleSessionForCompare(id)
+    } else {
+      onSelectSession(id)
+    }
+  }
+
   const hasActiveFilters = searchQuery || statusFilter !== 'all' || consensusFilter !== 'all' || sortBy !== 'newest'
 
   if (sessions.length === 0) {
@@ -111,7 +143,35 @@ export default function SessionSelector({ sessions, onSelectSession }: Props) {
 
   return (
     <div className="session-selector">
-      <h2 className="selector-title">Välj en debatt att visa</h2>
+      <div className="selector-header">
+        <h2 className="selector-title">
+          {compareMode ? 'Välj debatter att jämföra' : 'Välj en debatt att visa'}
+        </h2>
+        {onCompare && sessions.length >= 2 && (
+          <button
+            className={`compare-mode-toggle ${compareMode ? 'active' : ''}`}
+            onClick={toggleCompareMode}
+          >
+            {compareMode ? '✕ Avbryt' : '⚖️ Jämför'}
+          </button>
+        )}
+      </div>
+
+      {/* Compare Mode Bar */}
+      {compareMode && (
+        <div className="compare-bar">
+          <span className="compare-count">
+            {selectedForCompare.size} av max 4 valda
+          </span>
+          <button
+            className="compare-button"
+            disabled={selectedForCompare.size < 2}
+            onClick={handleCompare}
+          >
+            Jämför {selectedForCompare.size} debatter
+          </button>
+        </div>
+      )}
 
       {/* Search and Filter Bar */}
       <div className="filter-bar">
@@ -197,9 +257,14 @@ export default function SessionSelector({ sessions, onSelectSession }: Props) {
           {filteredSessions.map((session) => (
             <div
               key={session.id}
-              className="session-card"
-              onClick={() => onSelectSession(session.id)}
+              className={`session-card ${compareMode ? 'compare-mode' : ''} ${selectedForCompare.has(session.id) ? 'selected' : ''}`}
+              onClick={() => handleCardClick(session.id)}
             >
+              {compareMode && (
+                <div className="compare-checkbox">
+                  {selectedForCompare.has(session.id) ? '✓' : ''}
+                </div>
+              )}
               <div className="session-header">
                 <span
                   className="session-status"

@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react'
 import SessionSelector from './components/SessionSelector'
 import DebateView from './components/DebateView'
+import CompareView from './components/CompareView'
 import { DebateSession, SessionSummary } from './types'
 import './App.css'
 
 type Theme = 'dark' | 'light'
+type ViewMode = 'list' | 'detail' | 'compare'
 
 function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [selectedSession, setSelectedSession] = useState<DebateSession | null>(null)
+  const [compareSessions, setCompareSessions] = useState<DebateSession[]>([])
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [theme, setTheme] = useState<Theme>(() => {
@@ -52,9 +56,32 @@ function App() {
       if (!response.ok) throw new Error('Failed to load session')
       const data = await response.json()
       setSelectedSession(data)
+      setViewMode('detail')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     }
+  }
+
+  const handleCompare = async (ids: string[]) => {
+    try {
+      setLoading(true)
+      const sessionPromises = ids.map(id =>
+        fetch(`/api/sessions/${id}`).then(res => res.json())
+      )
+      const loadedSessions = await Promise.all(sessionPromises)
+      setCompareSessions(loadedSessions)
+      setViewMode('compare')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleBack = () => {
+    setSelectedSession(null)
+    setCompareSessions([])
+    setViewMode('list')
   }
 
   return (
@@ -77,23 +104,31 @@ function App() {
           {loading && <div className="loading">Loading sessions...</div>}
           {error && <div className="error">{error}</div>}
 
-          {!loading && !error && !selectedSession && (
+          {!loading && !error && viewMode === 'list' && (
             <SessionSelector
               sessions={sessions}
               onSelectSession={loadSession}
+              onCompare={handleCompare}
             />
           )}
 
-          {selectedSession && (
+          {viewMode === 'detail' && selectedSession && (
             <>
               <button
                 className="back-button"
-                onClick={() => setSelectedSession(null)}
+                onClick={handleBack}
               >
                 ← Back to sessions
               </button>
               <DebateView session={selectedSession} />
             </>
+          )}
+
+          {viewMode === 'compare' && compareSessions.length > 0 && (
+            <CompareView
+              sessions={compareSessions}
+              onClose={handleBack}
+            />
           )}
         </div>
       </main>
