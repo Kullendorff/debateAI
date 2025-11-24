@@ -7,18 +7,28 @@
 .app-header {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  padding: 2rem 0;
+  padding: 1.5rem 0;
   position: sticky;
   top: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
-  background: rgba(26, 26, 26, 0.8);
+  background: var(--header-bg);
+}
+
+.app-header .container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.app-header .header-content {
+  flex: 1;
 }
 
 .app-header h1 {
   font-size: 2rem;
   font-weight: 700;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   background: linear-gradient(135deg, var(--color-primary), var(--color-gpt));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -27,7 +37,33 @@
 
 .app-header p {
   color: var(--color-text-secondary);
-  font-size: 1rem;
+  font-size: 0.95rem;
+}
+
+/* Theme Toggle */
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-toggle:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+  transform: scale(1.05);
+}
+
+.theme-toggle span {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
 }
 
 .app-main {
