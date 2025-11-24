@@ -4,6 +4,7 @@
   box-sizing: border-box;
 }
 
+/* Dark theme (default) */
 :root {
   --color-bg: #0a0a0a;
   --color-surface: #1a1a1a;
@@ -26,6 +27,32 @@
 
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
   --font-mono: 'SF Mono', 'Consolas', 'Monaco', monospace;
+
+  --header-bg: rgba(26, 26, 26, 0.8);
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --color-bg: #f5f5f5;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f0f0f0;
+  --color-border: #e0e0e0;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #555;
+  --color-text-tertiary: #888;
+  --color-primary: #2563eb;
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  --color-gpt: #0d8c6d;
+  --color-gpt-bg: rgba(16, 163, 127, 0.15);
+  --color-claude: #b45309;
+  --color-claude-bg: rgba(217, 119, 6, 0.15);
+  --color-gemini: #2563eb;
+  --color-gemini-bg: rgba(59, 130, 246, 0.15);
+
+  --header-bg: rgba(255, 255, 255, 0.9);
 }
 
 body {

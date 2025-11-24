@@ -4,11 +4,29 @@ import DebateView from './components/DebateView'
 import { DebateSession, SessionSummary } from './types'
 import './App.css'
 
+type Theme = 'dark' | 'light'
+
 function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [selectedSession, setSelectedSession] = useState<DebateSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [theme, setTheme] = useState<Theme>(() => {
+    // Check localStorage or system preference
+    const saved = localStorage.getItem('theme') as Theme | null
+    if (saved) return saved
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  })
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
+  }
 
   useEffect(() => {
     loadSessions()
@@ -43,8 +61,14 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="container">
-          <h1>🤖 DebateAI</h1>
-          <p>Live AI Panel Debate Visualizer</p>
+          <div className="header-content">
+            <h1>DebateAI</h1>
+            <p>Live AI Panel Debate Visualizer</p>
+          </div>
+          <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+            <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
         </div>
       </header>
 
