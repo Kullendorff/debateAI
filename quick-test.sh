@@ -5,9 +5,12 @@ echo "🧪 DebateAI - Quick Test Setup"
 echo "================================"
 echo ""
 
-# Check if node_modules exists
+# Check if node_modules exists or if types are missing
 if [ ! -d "node_modules" ]; then
     echo "📦 Installerar backend dependencies..."
+    npm install
+elif [ ! -d "node_modules/@types/express" ]; then
+    echo "📦 Uppdaterar backend dependencies (types saknas)..."
     npm install
 fi
 

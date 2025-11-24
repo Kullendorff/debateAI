@@ -5,9 +5,12 @@ echo 🧪 DebateAI - Quick Test Setup
 echo ================================
 echo.
 
-REM Check if node_modules exists
+REM Check if node_modules exists or if types are missing
 if not exist "node_modules\" (
     echo 📦 Installerar backend dependencies...
+    call npm install
+) else if not exist "node_modules\@types\express\" (
+    echo 📦 Uppdaterar backend dependencies ^(types saknas^)...
     call npm install
 )
 
