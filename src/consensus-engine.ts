@@ -5,11 +5,18 @@ import {
   PhoneAFriendResult,
   DisagreementReport,
   AIResponse,
-  ContinueDebateParams
+  ContinueDebateParams,
+  PeerReviewSummary,
+  ConsensusBreakdownSummary,
+  ChairmanSynthesisSummary
 } from './types.js';
 import { AIClientManager } from './ai-clients.js';
 import { CostController } from './cost-controller.js';
 import { SessionStore, FileSessionStore } from './session-store.js';
+// Nya avancerade funktioner (llm-council inspirerade)
+import { ConsensusAnalyzer, ConsensusBreakdown } from './consensus-breakdown.js';
+import { ChairmanSynthesizer, SynthesisResult } from './chairman-synthesizer.js';
+import { PeerReviewSystem, PeerReviewResult } from './peer-review.js';
 
 export class ConsensusEngine {
   private sessionStore: SessionStore;
@@ -17,10 +24,20 @@ export class ConsensusEngine {
   private costController: CostController;
   private initialized: boolean = false;
 
+  // Nya avancerade system (llm-council inspirerade)
+  private consensusAnalyzer: ConsensusAnalyzer;
+  private chairmanSynthesizer: ChairmanSynthesizer;
+  private peerReviewSystem: PeerReviewSystem;
+
   constructor(aiManager: AIClientManager, sessionStore?: SessionStore) {
     this.aiManager = aiManager;
     this.costController = new CostController();
     this.sessionStore = sessionStore || new FileSessionStore();
+
+    // Initiera avancerade system
+    this.consensusAnalyzer = new ConsensusAnalyzer();
+    this.chairmanSynthesizer = new ChairmanSynthesizer(aiManager);
+    this.peerReviewSystem = new PeerReviewSystem(aiManager);
   }
 
   /**
@@ -667,6 +684,7 @@ Vänligen ge ditt svar, och bemöt de andra AI:ernas poänger där det är relev
   }
 
   private synthesizeFinalAnswer(round: DebateRound): string {
+    // Enkel fallback för snabb syntes (används när vi inte vill ha async)
     const responses = [
       round.responses.openai.content,
       round.responses.gemini.content,
@@ -676,8 +694,148 @@ Vänligen ge ditt svar, och bemöt de andra AI:ernas poänger där det är relev
     // Find the longest response as the base
     const longestResponse = responses.reduce((a, b) => a.length > b.length ? a : b);
 
-    // Simple synthesis - in a real implementation, this could use LLM to synthesize
     return `Baserat på AI-panelens konsensus:\n\n${longestResponse}\n\n(Detta svar representerar AI-panelens konvergerade position)`;
+  }
+
+  /**
+   * Avancerad syntes med Chairman (kräver extra API-anrop)
+   * Använder en AI som "ordförande" för att skapa en intelligent syntes
+   */
+  async synthesizeWithChairman(
+    session: DebateSession,
+    round: DebateRound,
+    chairman?: 'openai' | 'gemini' | 'claude'
+  ): Promise<SynthesisResult> {
+    // Välj optimal ordförande om inte specificerad
+    const selectedChairman = chairman ||
+      this.chairmanSynthesizer.selectOptimalChairman(session, round);
+
+    console.error(`[ConsensusEngine] Using chairman synthesis with ${selectedChairman}...`);
+
+    const result = await this.chairmanSynthesizer.synthesize(session, round, selectedChairman);
+
+    // Spara syntesen i session
+    session.chairman_synthesis = {
+      chairman: result.chairman,
+      synthesized_answer: result.synthesized_answer,
+      confidence: result.confidence,
+      key_agreements: result.key_agreements,
+      key_disagreements: result.key_disagreements,
+      cost_usd: result.cost_usd,
+      timestamp: new Date()
+    };
+
+    // Lägg till kostnad
+    this.costController.addCost(
+      session.id,
+      result.chairman,
+      result.cost_usd,
+      result.tokens_used,
+      round.round_number
+    );
+
+    session.current_cost_usd += result.cost_usd;
+    await this.sessionStore.set(session.id, session);
+
+    return result;
+  }
+
+  /**
+   * Genomför peer review av en runda (kräver extra API-anrop)
+   * Varje AI rankar de andras svar anonymt
+   */
+  async conductPeerReview(
+    session: DebateSession,
+    round: DebateRound
+  ): Promise<PeerReviewResult> {
+    console.error(`[ConsensusEngine] Conducting peer review for round ${round.round_number}...`);
+
+    const result = await this.peerReviewSystem.conductPeerReview(session, round);
+
+    // Spara peer review i session
+    if (!session.peer_reviews) {
+      session.peer_reviews = [];
+    }
+
+    session.peer_reviews.push({
+      round_number: round.round_number,
+      winner: result.winner,
+      consensus_on_winner: result.consensus_on_winner,
+      rankings: result.aggregated_rankings.map(r => ({
+        provider: r.original_provider,
+        avg_position: r.avg_position,
+        votes_for_first: r.votes_for_first
+      })),
+      cost_usd: result.total_cost_usd,
+      timestamp: new Date()
+    });
+
+    // Lägg till kostnader
+    for (const review of result.reviews) {
+      this.costController.addCost(
+        session.id,
+        review.reviewer,
+        review.cost_usd,
+        review.tokens_used,
+        round.round_number
+      );
+    }
+
+    session.current_cost_usd += result.total_cost_usd;
+    await this.sessionStore.set(session.id, session);
+
+    return result;
+  }
+
+  /**
+   * Analysera konsensus med detaljerad breakdown (GRATIS - ingen AI-kostnad!)
+   */
+  analyzeConsensusBreakdown(round: DebateRound): ConsensusBreakdown {
+    return this.consensusAnalyzer.analyzeConsensus(round.responses);
+  }
+
+  /**
+   * Spara konsensusanalys i session
+   */
+  async saveConsensusBreakdown(
+    session: DebateSession,
+    round: DebateRound
+  ): Promise<ConsensusBreakdown> {
+    const breakdown = this.analyzeConsensusBreakdown(round);
+
+    session.consensus_breakdown = {
+      round_number: round.round_number,
+      overall_score: breakdown.overall_score,
+      components: breakdown.components,
+      agreement_points: breakdown.agreement_points,
+      disagreement_points: breakdown.disagreement_points.map(d => d.point),
+      timestamp: new Date()
+    };
+
+    await this.sessionStore.set(session.id, session);
+    return breakdown;
+  }
+
+  /**
+   * Hämta formaterad konsensusanalys
+   */
+  getFormattedConsensusBreakdown(round: DebateRound): string {
+    const breakdown = this.analyzeConsensusBreakdown(round);
+    return this.consensusAnalyzer.formatBreakdown(breakdown);
+  }
+
+  /**
+   * Hämta formaterad peer review
+   */
+  getFormattedPeerReview(result: PeerReviewResult): string {
+    return this.peerReviewSystem.formatPeerReviewResult(result);
+  }
+
+  /**
+   * Hämta formaterad chairman synthesis
+   */
+  getFormattedSynthesis(result: SynthesisResult): string {
+    return this.chairmanSynthesizer.formatSynthesisResult(result);
   }
 
   private analyzeDisagreement(rounds: DebateRound[]): DisagreementReport {
