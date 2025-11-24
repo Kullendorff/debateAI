@@ -4,9 +4,12 @@ Write-Host "🧪 DebateAI - Quick Test Setup" -ForegroundColor Cyan
 Write-Host "================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Check if node_modules exists
+# Check if node_modules exists or if types are missing
 if (-not (Test-Path "node_modules")) {
     Write-Host "📦 Installerar backend dependencies..." -ForegroundColor Yellow
+    npm install
+} elseif (-not (Test-Path "node_modules\@types\express")) {
+    Write-Host "📦 Uppdaterar backend dependencies (types saknas)..." -ForegroundColor Yellow
     npm install
 }
 
