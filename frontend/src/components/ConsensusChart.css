@@ -1,0 +1,155 @@
+.consensus-chart {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.chart-title {
+  font-size: 1.4rem;
+  color: var(--color-text);
+}
+
+.chart-legend {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.legend-dot.consensus {
+  background: #e0e0e0;
+}
+
+.legend-dot.gpt {
+  background: var(--color-gpt);
+}
+
+.legend-dot.claude {
+  background: var(--color-claude);
+}
+
+.legend-dot.gemini {
+  background: var(--color-gemini);
+}
+
+.custom-tooltip {
+  background: rgba(26, 26, 26, 0.95);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.tooltip-title {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--color-text);
+  font-size: 0.875rem;
+}
+
+.tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tooltip-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
+
+.tooltip-label {
+  color: var(--color-text-secondary);
+}
+
+.tooltip-value {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.tooltip-item.consensus .tooltip-value {
+  color: #e0e0e0;
+}
+
+.tooltip-item.gpt .tooltip-value {
+  color: var(--color-gpt);
+}
+
+.tooltip-item.claude .tooltip-value {
+  color: var(--color-claude);
+}
+
+.tooltip-item.gemini .tooltip-value {
+  color: var(--color-gemini);
+}
+
+.tooltip-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0.25rem 0;
+}
+
+.chart-insights {
+  display: flex;
+  justify-content: center;
+  gap: 3rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.insight {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.insight-label {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.insight-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.insight-value.positive {
+  color: var(--color-success);
+}
+
+.insight-value.negative {
+  color: var(--color-danger);
+}
